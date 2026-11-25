@@ -1,5 +1,5 @@
 // Keeps the app shell available offline-ish: the page itself is network-first (so updates arrive), everything else is left to the network.
-const CACHE = "vanlife-map-shell-v3";
+const CACHE = "vanlife-map-shell-v4";
 const SHELL = ["./", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon.svg"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
