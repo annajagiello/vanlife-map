@@ -91,6 +91,10 @@
   #legend .ticks span { position: absolute; top: 0; transform: translateX(-50%); }
   .cell { padding: 1px 5px; font-size: 12px; font-weight: 700; color: #111; white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
   #keybox { padding: 16px; }
+  .sect { margin-top: 12px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  #more .sect:first-of-type { margin-top: 8px; }
+  #wxopts.off { opacity: .45; }
+  #wxopts.off button { cursor: default; }
   #moreBtn, .sheet-head { display: none; }
   @media (max-width: 760px) {
     body { grid-template-columns: 1fr; grid-template-rows: 62vh 1fr; grid-template-rows: 62dvh 1fr; height: 100vh; height: 100dvh; }
@@ -142,21 +146,27 @@
       </div>
       <div id="more">
       <div class="sheet-head"><strong>Settings</strong><button id="moreClose">Done</button></div>
-      <div class="row" style="margin-top:10px">
-        <span class="meta">Weather</span><div id="days"></div>
-      </div>
-      <div class="row" id="hlrow" style="margin-top:6px" hidden>
-        <span class="meta">Map shows</span><div id="hl"><button data-m="max" class="on">Daily high</button><button data-m="min">Daily low</button><button data-m="rain">Rain</button></div>
-      </div>
-      <div class="row chk" style="margin-top:10px">
+      <div class="sect">Spots</div>
+      <div class="row chk">
         <label title="Motorhome aires, camper parking, regular parking and rest stops"><input type="checkbox" id="showVan" checked> Van stops</label>
         <label title="Campsites"><input type="checkbox" id="showCamping"> Campsites</label>
-        <label title="Temperature areas on the map, with daily high / low numbers"><input type="checkbox" id="heatOn"> Heat map</label>
         <label title="Public toilets from Google and OpenStreetMap (searched only while ticked)"><input type="checkbox" id="showToilets"> Toilets</label>
         <label title="Show laundromats on the map (a Places search per view)"><input type="checkbox" id="showLaundry"> Laundromats</label>
         <label title="Show shopping malls on the map (a Places search per view)"><input type="checkbox" id="showMalls"> Malls</label>
         <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
         <label title="Only spots where Google says there is a toilet; spots with no toilet info are hidden"><input type="checkbox" id="onlyToilet"> Only with toilet</label>
+      </div>
+      <div class="sect">Weather</div>
+      <div class="row">
+        <label title="Temperature areas on the map, with daily high / low numbers"><input type="checkbox" id="heatOn"> Heat map</label>
+      </div>
+      <div id="wxopts" class="off">
+        <div class="row" style="margin-top:6px">
+          <span class="meta">Day</span><div id="days"></div>
+        </div>
+        <div class="row" id="hlrow" style="margin-top:6px">
+          <span class="meta">Map shows</span><div id="hl"><button data-m="max" class="on">Daily high</button><button data-m="min">Daily low</button><button data-m="rain">Rain</button></div>
+        </div>
       </div>
       <div class="row p4n-row" style="margin-top:10px">
         <label>Park4night file <input type="file" id="p4nFile" accept=".json,application/json"></label>
@@ -994,7 +1004,13 @@ function fillWxBox(s) {
   box.append(strip);
 }
 
-$("heatOn").onchange = () => { $("hlrow").hidden = !$("heatOn").checked; scheduleHeat(0); };
+$("heatOn").onchange = () => {
+  const on = $("heatOn").checked;
+  $("wxopts").classList.toggle("off", !on);
+  document.querySelectorAll("#wxopts button").forEach((b) => (b.disabled = !on));
+  if (!on && wDay !== 0) { wDay = 0; updateWx(); } // the day and map options belong to the heat map: back to today when it is switched off
+  scheduleHeat(0);
+};
 $("hl").onclick = (e) => {
   const b = e.target.closest("button");
   if (!b) return;
@@ -1169,6 +1185,7 @@ async function showDetail(s) {
   }
 }
 
+document.querySelectorAll("#wxopts button").forEach((b) => (b.disabled = true)); // until Heat map is ticked
 init();
 // Installable app: the service worker needs https (or localhost).
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
