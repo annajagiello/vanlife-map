@@ -102,6 +102,11 @@
   #more .sect:first-of-type { margin-top: 8px; }
   #wxopts.off { display: none; } /* the day and map options only take space while the heat map is on */
   #panelToggle { display: none; }
+  #wxbar { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); z-index: 5; display: grid; gap: 4px; justify-items: center; padding: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  #wxbar[hidden] { display: none; }
+  #mapDays, #mapMode { display: flex; gap: 3px; }
+  #wxbar button { padding: 2px 5px; font-size: 11px; line-height: 1.15; min-width: 34px; }
+  #wxbar button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   #fsBtn { position: absolute; right: 10px; top: 10px; z-index: 6; width: 40px; height: 40px; padding: 0; font-size: 20px; line-height: 1; border-radius: 2px; background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
   #mapwrap.fs { position: fixed; inset: 0; z-index: 100; height: auto; } /* where the Fullscreen API is missing (iPhone) */
   #mapwrap:fullscreen { background: var(--bg); }
@@ -193,7 +198,7 @@
   </div>
   <ul id="list"></ul>
 </aside>
-<div id="mapwrap"><div id="map"></div><button id="fsBtn" aria-label="Full screen" title="Full screen">⛶</button><button id="panelToggle" aria-label="Hide controls" title="Hide controls">⌄</button><div id="legend" hidden></div><div id="detail" hidden></div></div>
+<div id="mapwrap"><div id="map"></div><button id="fsBtn" aria-label="Full screen" title="Full screen">⛶</button><button id="panelToggle" aria-label="Hide controls" title="Hide controls">⌄</button><div id="wxbar" hidden><div id="mapDays"></div><div id="mapMode"></div></div><div id="legend" hidden></div><div id="detail" hidden></div></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -769,7 +774,7 @@ function wxText(w, i) {
 }
 
 function updateWx() {
-  document.querySelectorAll("#days button").forEach((b) => b.classList.toggle("on", +b.dataset.i === wDay));
+  document.querySelectorAll("#days button, #mapDays button").forEach((b) => b.classList.toggle("on", +b.dataset.i === wDay));
   document.querySelectorAll(".wx[data-sid]").forEach((e) => {
     const sp = spots.find((x) => x.id === e.dataset.sid);
     const w = sp && spotWx(sp);
@@ -1048,17 +1053,17 @@ function fillWxBox(s) {
 $("heatOn").onchange = () => {
   const on = $("heatOn").checked;
   $("wxopts").classList.toggle("off", !on);
+  $("wxbar").hidden = !on;
   document.querySelectorAll("#wxopts button").forEach((b) => (b.disabled = !on));
   if (!on && wDay !== 0) { wDay = 0; updateWx(); } // the day and map options belong to the heat map: back to today when it is switched off
   scheduleHeat(0);
 };
-$("hl").onclick = (e) => {
-  const b = e.target.closest("button");
-  if (!b) return;
-  heatMode = b.dataset.m;
-  document.querySelectorAll("#hl button").forEach((x) => x.classList.toggle("on", x === b));
+const setMode = (m) => {
+  heatMode = m;
+  document.querySelectorAll("#hl button, #mapMode button").forEach((x) => x.classList.toggle("on", x.dataset.m === m));
   scheduleHeat(0);
 };
+$("hl").onclick = (e) => { const b = e.target.closest("button"); if (b) setMode(b.dataset.m); };
 
 const setSheet = (open) => { $("more").classList.toggle("open", open); $("moreBtn").setAttribute("aria-expanded", open); };
 $("moreBtn").onclick = () => setSheet(!$("more").classList.contains("open"));
@@ -1083,6 +1088,19 @@ for (let i = 0; i < 7; i++) {
   b.onclick = () => { wDay = i; updateWx(); };
   daysBox.append(b);
 }
+// The same choices on the map itself, shown while the heat map is on, so the settings don't need opening to change day or what is shown.
+for (let i = 0; i < 7; i++) {
+  const l = wxDayLabel(i), parts = i < 2 ? [i === 0 ? "Today" : "Tmrw"] : l.split(" ");
+  const b = el("button", null); b.dataset.i = i; b.title = wxDayLabel(i, true);
+  parts.forEach((t) => b.append(el("div", t)));
+  b.onclick = () => { wDay = i; updateWx(); };
+  $("mapDays").append(b);
+}
+[["max", "High"], ["min", "Low"], ["rain", "Rain"]].forEach(([m, t]) => {
+  const b = el("button", t); b.dataset.m = m; b.className = m === "max" ? "on" : "";
+  b.onclick = () => setMode(m);
+  $("mapMode").append(b);
+});
 
 function render() {
   markers.forEach((m) => (m.map = null));
