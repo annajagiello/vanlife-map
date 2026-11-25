@@ -324,6 +324,7 @@ async function init() {
     map.addListener("idle", () => scheduleHeat(700));
     map.addListener("maptypeid_changed", applyBlend);
     map.addListener("idle", autoSearch);
+    markFavs(); // saved favourites appear straight away
     map.addListener("click", () => setSheet(false)); // tap the map to close the mobile settings sheet
     map.addListener("idle", () => store.set("last_view", JSON.stringify({ center: map.getCenter().toJSON(), zoom: map.getZoom() })));
     $("tools").hidden = false;
@@ -1062,6 +1063,7 @@ $("moreClose").onclick = () => setSheet(false);
 // Full screen on the whole map area (map + popup + legend), not only the map div, so a tapped pin can still show its card.
 $("fsBtn").onclick = () => {
   const wrap = $("mapwrap");
+  if (wrap.classList.contains("fs")) { wrap.classList.remove("fs"); return; } // leave the CSS full screen
   if (document.fullscreenEnabled) { if (document.fullscreenElement) document.exitFullscreen(); else wrap.requestFullscreen().catch(() => wrap.classList.add("fs")); }
   else wrap.classList.toggle("fs");
 };
