@@ -94,13 +94,15 @@
   #keybox { padding: 16px; }
   .sect { margin-top: 12px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
   #more .sect:first-of-type { margin-top: 8px; }
-  #wxopts.off { opacity: .45; }
-  #wxopts.off button { cursor: default; }
+  #wxopts.off { display: none; } /* the day and map options only take space while the heat map is on */
+  #panelToggle { display: none; }
   #moreBtn, .sheet-head { display: none; }
   @media (max-width: 760px) {
     body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; height: 100dvh; }
     #mapwrap { order: -1; height: auto; min-height: 0; }
     #list { display: none; } /* on a phone the spots are read from the map */
+    body.nopanel aside { display: none; }
+    #panelToggle { display: block; position: absolute; right: 10px; top: 60px; z-index: 6; width: 40px; height: 40px; padding: 0; font-size: 20px; line-height: 1; border-radius: 2px; background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
     aside { border-right: 0; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
     .controls { padding: 6px 10px; gap: 4px; }
     .controls h1 { display: none; }
@@ -182,7 +184,7 @@
   </div>
   <ul id="list"></ul>
 </aside>
-<div id="mapwrap"><div id="map"></div><div id="legend" hidden></div><div id="detail" hidden></div></div>
+<div id="mapwrap"><div id="map"></div><button id="panelToggle" aria-label="Hide controls" title="Hide controls">⌄</button><div id="legend" hidden></div><div id="detail" hidden></div></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -1043,6 +1045,13 @@ $("hl").onclick = (e) => {
 const setSheet = (open) => { $("more").classList.toggle("open", open); $("moreBtn").setAttribute("aria-expanded", open); };
 $("moreBtn").onclick = () => setSheet(!$("more").classList.contains("open"));
 $("moreClose").onclick = () => setSheet(false);
+$("panelToggle").onclick = () => { // phone: hide / show the whole control bar to give the map the full screen
+  const hide = !document.body.classList.contains("nopanel");
+  document.body.classList.toggle("nopanel", hide);
+  setSheet(false);
+  $("panelToggle").textContent = hide ? "⌃" : "⌄";
+  $("panelToggle").title = $("panelToggle").ariaLabel = hide ? "Show controls" : "Hide controls";
+};
 const daysBox = $("days");
 for (let i = 0; i < 7; i++) {
   const b = el("button", wxDayLabel(i)); b.dataset.i = i;
