@@ -1,0 +1,1158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6b4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Camper Spots">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Camper Spots</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%232f6b4f'/%3E%3Cpath%20d='M8%2042V27a4%204%200%200%201%204-4h25l13%2011h6a4%204%200%200%201%204%204v4z'%20fill='%23fff'/%3E%3Cpath%20d='M39%2027l8%207h-8z'%20fill='%232f6b4f'/%3E%3Ccircle%20cx='21'%20cy='43'%20r='6'%20fill='%232f6b4f'%20stroke='%23fff'%20stroke-width='3'/%3E%3Ccircle%20cx='47'%20cy='43'%20r='6'%20fill='%232f6b4f'%20stroke='%23fff'%20stroke-width='3'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #fafaf7; --panel: #ffffff; --text: #1d2420; --muted: #66706a; --line: #dfe3dc;
+    --google: #1a73e8; --p4n: #d9480f; --accent: #2f6b4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141815; --panel: #1c211e; --text: #e8ece8; --muted: #9aa49d; --line: #2c342f; --accent: #6bbf93; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: grid; grid-template-columns: 360px 1fr; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .controls { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+  h1 { font-size: 16px; margin: 0; }
+  input[type=text], input[type=password], input[type=number] { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row label { display: flex; gap: 4px; align-items: center; color: var(--muted); }
+  #status { color: var(--muted); font-size: 12px; min-height: 16px; }
+  #list { overflow-y: auto; flex: 1; margin: 0; padding: 0; list-style: none; }
+  #list li { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .kind { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .kind.wc { color: #0c8599; border-color: #0c8599; }
+  .kind.open { color: #2b8a3e; border-color: #2b8a3e; }
+  #list li:hover, #list li.active { background: var(--bg); }
+  .name { font-weight: 600; display: flex; gap: 8px; align-items: flex-start; }
+  .name .tag { flex: none; margin-top: 1px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .tag { display: inline-grid; place-items: center; width: 18px; height: 18px; font-size: 11px; font-weight: 700; border-radius: 50%; color: #fff; }
+  .links { display: flex; gap: 14px; font-size: 12px; margin-top: 2px; }
+  .links a { color: var(--google); }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+  .badges .kind { margin-right: 0; }
+  .tag.google { background: var(--google); }
+  .tag.p4n { background: var(--p4n); }
+  .tag.osm { width: auto; padding: 0 7px; border-radius: 9px; background: #5d9c3f; flex: none; }
+  #mapwrap { position: relative; height: 100vh; }
+  #map { height: 100%; }
+  #detail { position: absolute; left: 12px; bottom: 28px; width: min(380px, calc(100% - 24px)); max-height: 60%; overflow-y: auto; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.35); padding: 14px 16px; z-index: 5; }
+  #detail[hidden] { display: none; }
+  #detail h2 { font-size: 16px; margin: 0; }
+  #detail .top { display: flex; gap: 8px; align-items: center; margin: 0 28px 4px 0; }
+  #detail .close { position: absolute; top: 8px; right: 8px; padding: 2px 8px; }
+  #detail p { margin: 8px 0; }
+  #detail .rev { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+  #detail a { color: var(--google); }
+  .pin { position: relative; width: 24px; height: 24px; border-radius: 50%; border: 0; box-shadow: 0 1px 4px rgba(0,0,0,.45); opacity: 1; transform: translateY(50%); }
+  .pin::before { content: attr(data-glyph); position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; line-height: 1; }
+  .pin.sel::before { font-size: 20px; }
+  .pin.small { width: 24px; height: 24px; border-width: 0; }
+  .pin.small.poi::before { font-size: 13px; letter-spacing: 0; } /* higher specificity than .pin.small::before below */
+  .pin.small.poi-laundry::before { font-size: 16px; }
+  .pin.small.poi-mall::before { font-size: 16px; filter: brightness(0) invert(1); } /* malls: a white bag on Google's shopping blue */
+  .pin.small::before { font-size: 11px; font-weight: 800; color: #fff; letter-spacing: -.3px; }
+  .pin.google { background: #0b57d0; }
+  .pin.p4n { background: #c2410c; border-radius: 6px; }
+  .pin.sel { width: 38px; height: 38px; border: 5px solid #ffd43b; box-shadow: 0 2px 8px rgba(0,0,0,.6); }
+  .pin .lbl { display: none; position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -6px); white-space: nowrap; padding: 3px 8px; border-radius: 6px; background: #1d2420; color: #fff; font-weight: 600; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+  .pin.sel .lbl { display: block; }
+  .wx { white-space: nowrap; }
+  .pin .wxpin { position: absolute; left: 100%; top: 50%; transform: translate(6px, -50%); padding: 2px 6px; border-radius: 10px; background: #fff; color: #111; border: 1px solid #111; font-size: 12px; font-weight: 700; line-height: 1.2; box-shadow: 0 1px 4px rgba(0,0,0,.5); pointer-events: none; }
+  .pin .mt { display: none; position: absolute; top: -9px; right: -11px; width: 17px; height: 17px; border-radius: 50%; background: #fff; color: #111; box-shadow: 0 1px 3px rgba(0,0,0,.45); font-size: 11px; line-height: 15px; text-align: center; pointer-events: none; }
+  .pin.high .mt { display: block; }
+  .pin .wxpin:empty, .pin .wxpin.skip { display: none; }
+  .meta .wx { float: right; color: var(--text); font-size: 13px; }
+  #days { display: flex; flex-wrap: wrap; gap: 4px; }
+  #days button, #hl button { padding: 3px 8px; font-size: 12px; }
+  #hl { display: flex; gap: 4px; }
+  #hl button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #days button.on, #wxstrip button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #wxbox { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  #wxbox .now { font-size: 15px; font-weight: 600; }
+  #wxstrip { display: flex; gap: 4px; margin-top: 6px; }
+  #wxstrip button { flex: 1; padding: 3px 0; font-size: 11px; line-height: 1.3; text-align: center; }
+  #legend { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 4px 10px 5px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); font-size: 11px; box-shadow: 0 1px 4px rgba(0,0,0,.35); pointer-events: none; white-space: nowrap; }
+  #legend .bar { height: 8px; width: 190px; border-radius: 4px; margin: 3px 0 2px; }
+  #legend .ticks { position: relative; height: 12px; color: var(--muted); }
+  #legend .ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+  .cell { padding: 1px 5px; font-size: 12px; font-weight: 700; color: #111; white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
+  #keybox { padding: 16px; }
+  #moreBtn { display: none; }
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 52vh 1fr; grid-template-rows: 52dvh 1fr; height: 100vh; height: 100dvh; }
+    #mapwrap { order: -1; height: 52vh; height: 52dvh; }
+    aside { border-right: 0; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+    .controls { padding: 8px 12px; gap: 6px; }
+    .controls h1 { display: none; }
+    #moreBtn { display: inline-block; }
+    #more { display: none; }
+    #more.open { display: block; max-height: 32vh; overflow-y: auto; }
+    #list li { padding: 10px 12px; }
+    #detail { left: 8px; bottom: 8px; width: calc(100% - 16px); max-height: 70%; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <div class="controls">
+    <h1>Camper Spots</h1>
+    <div id="keybox" hidden style="padding:0">
+      <input type="password" id="key" placeholder="Google Maps API key" autocomplete="off">
+      <div class="meta" style="margin-top:6px">Stored only in this browser (localStorage).</div>
+      <button class="primary" id="saveKey" style="margin-top:8px">Save and load map</button>
+    </div>
+    <div id="tools" hidden>
+      <div class="row">
+        <input type="text" id="goto" placeholder="Go to a place (e.g. Algarve)" style="flex:1">
+        <button id="gotoBtn">Go</button>
+        <button id="locate" title="Zoom to my location">📍</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" id="search">Search this area</button>
+        <button id="moreBtn" aria-expanded="false">⚙ Settings</button>
+      </div>
+      <div id="more">
+      <div class="row" style="margin-top:10px">
+        <span class="meta">Weather</span><div id="days"></div>
+      </div>
+      <div class="row" id="hlrow" style="margin-top:6px" hidden>
+        <span class="meta">Map shows</span><div id="hl"><button data-m="max" class="on">Daily high</button><button data-m="min">Daily low</button><button data-m="rain">Rain</button></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label title="Motorhome aires, camper parking, regular parking and rest stops"><input type="checkbox" id="showVan" checked> Van stops</label>
+        <label title="Campsites"><input type="checkbox" id="showCamping"> Campsites</label>
+        <label title="Temperature areas on the map, with daily high / low numbers"><input type="checkbox" id="heatOn"> Heat map</label>
+        <label title="Public toilets from Google and OpenStreetMap (searched only while ticked)"><input type="checkbox" id="showToilets"> Toilets</label>
+        <label title="Show laundromats on the map (a Places search per view)"><input type="checkbox" id="showLaundry"> Laundromats</label>
+        <label title="Show shopping malls on the map (a Places search per view)"><input type="checkbox" id="showMalls"> Malls</label>
+        <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
+        <label title="Only spots where Google says there is a toilet; spots with no toilet info are hidden"><input type="checkbox" id="onlyToilet"> Only with toilet</label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>Park4night file <input type="file" id="p4nFile" accept=".json,application/json"></label>
+      </div>
+      </div>
+    </div>
+    <div id="status"></div>
+    <button id="retryOsm" hidden>Retry OSM toilets</button>
+  </div>
+  <ul id="list"></ul>
+</aside>
+<div id="mapwrap"><div id="map"></div><div id="legend" hidden></div><div id="detail" hidden></div></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+// Fields that are cheap: id, displayName, location, formattedAddress, googleMapsURI, types.
+// rating + userRatingCount bill at a higher SKU tier (see Google pricing); drop them to stay in the cheaper tier.
+const FIELDS = ["id", "displayName", "location", "formattedAddress", "googleMapsURI", "rating", "userRatingCount", "types", "primaryType", "primaryTypeDisplayName", "regularOpeningHours", "currentOpeningHours", "utcOffsetMinutes", "businessStatus", "websiteURI", "hasRestroom"];
+
+// Every search runs all three; spots are told apart by their label, not filtered by the user.
+const SEARCHES = [
+  { textQuery: "campsite", includedType: "campground" },
+  { textQuery: "motorhome stopover aire", includedType: "rv_park" },
+  { textQuery: "campervan parking", includedType: "parking" },
+  { textQuery: "rest area", includedType: "rest_stop" },
+];
+
+const KINDS = {
+  camping: { label: "Camping", glyph: "⛺", color: "#2b8a3e" },
+  rv: { label: "RV park / aire", glyph: "🚐", color: "#7048e8" },
+  camperpark: { label: "Camper parking", glyph: "🅿️", color: "#d9480f" },
+  parking: { label: "Parking", glyph: "🅿️", color: "#5c6b7a" },
+  reststop: { label: "Rest stop", glyph: "🛣️", color: "#1971c2" },
+  other: { label: "Other business", glyph: "?", color: "#868e96" },
+  toilet: { label: "Public toilet", glyph: "WC", color: "#0b7285" },
+  laundry: { label: "Laundromat", glyph: "👕", color: "#fab005" },
+  mall: { label: "Shopping mall", glyph: "🛍️", color: "#4285f4" },
+  supermarket: { label: "Supermarket", glyph: "🛍️", color: "#a61e4d" },
+};
+// Place.isOpen() is not available in the current Maps library, so check the periods ourselves.
+// Google days are 0 = Sunday. A period without "close" that opens Sunday 00:00 means open 24/7.
+function isOpenNow(p) {
+  const hours = p.currentOpeningHours || p.regularOpeningHours;
+  const periods = hours?.periods;
+  if (!periods?.length || p.utcOffsetMinutes == null) return undefined;
+  const local = new Date(Date.now() + p.utcOffsetMinutes * 60000); // UTC getters now read the place's local time
+  const week = 7 * 1440;
+  const now = local.getUTCDay() * 1440 + local.getUTCHours() * 60 + local.getUTCMinutes();
+  for (const per of periods) {
+    if (!per.close) return true;
+    const open = per.open.day * 1440 + per.open.hour * 60 + per.open.minute;
+    let close = per.close.day * 1440 + per.close.hour * 60 + per.close.minute;
+    if (close <= open) close += week;
+    if ((now >= open && now < close) || (now + week >= open && now + week < close)) return true;
+  }
+  return false;
+}
+
+// Types that mark a business (dealer, repair, shop, storage...) rather than a place to stay.
+const BUSINESS = ["car_dealer", "truck_dealer", "car_repair", "car_rental", "store", "storage", "supplier", "gas_station", "travel_agency"];
+// Garages / underground / covered car parks (height limits, no room for campers): Google's own garage type, or a garage-like name on a parking place.
+const GARAGE_NAME = /garage|autosilo|\bsilo\b|underground|multi.?stor|tiefgarage|parkhaus|sotterrane|interrat|couvert|covered|coperto|\bcoperta\b/i;
+const isGarage = (p, kind) => (p.types || []).includes("parking_garage") || ((kind === "parking" || kind === "camperpark") && GARAGE_NAME.test(p.displayName || ""));
+const PARKING_FOR_CAMPERS = /camper|motorhome|motor-home|camping.?car|wohnmobil|caravan|\bsosta\b|\baire\b|stellplatz|autocaravan/i;
+const CAMP_NAME = /camp(ing|site|eggio)|caravan\s?park|stellplatz|sosta|\baire\b/i;
+// Classify by Google's primary type, then any listed type. Google often mislabels real campsites
+// (e.g. tour_agency, sports_activity_location), so a place returned by the campsite query that is
+// lodging-tagged or has "camp" in its name still counts, unless it carries a business type.
+function kindOf(p, via = []) {
+  const primary = p.primaryType, types = p.types || [];
+  const byType = (t) => (t === "campground" || t === "camping_cabin" ? "camping" : t === "rv_park" ? "rv" : t === "parking" || t === "parking_lot" ? "parking" : t === "rest_stop" ? "reststop" : null);
+  const direct = byType(primary) || ["campground", "camping_cabin", "rv_park", "rest_stop", "parking", "parking_lot"].filter((t) => types.includes(t)).map(byType)[0];
+  // Regular parking is kept; the ones named for campers get their own label.
+  if (direct === "parking") return { kind: PARKING_FOR_CAMPERS.test(p.displayName || "") ? "camperpark" : "parking", inferred: false };
+  if (direct) return { kind: direct, inferred: false };
+  const isBusiness = types.some((t) => BUSINESS.includes(t)) && !types.includes("lodging");
+  const isBusinessStrict = types.some((t) => ["car_dealer", "truck_dealer", "car_repair", "store", "storage", "supplier"].includes(t));
+  if (!isBusinessStrict && !isBusiness && via.includes("campground") && (types.includes("lodging") || CAMP_NAME.test(p.displayName || ""))) {
+    return { kind: "camping", inferred: true };
+  }
+  return { kind: "other", inferred: false };
+}
+
+let map, Place, AdvancedMarkerElement;
+let spots = [];            // {id, source, name, lat, lng, address, url, rating, count}
+const markers = new Map(); // id -> marker
+const toiletMarkers = { google: [], osm: [] };
+let searchSeq = 0;
+
+// Only http(s) URLs become links; anything else from a data source is dropped.
+function safeUrl(u) {
+  try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch { return ""; }
+}
+function siteName(u) { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return "Website"; } }
+
+let statusMain = "", statusExtra = "";
+function setStatus(t, keepExtra) { statusMain = t; if (!keepExtra) statusExtra = ""; $("status").textContent = statusMain + statusExtra; }
+function setExtra(t) { statusExtra = t; $("status").textContent = statusMain + statusExtra; }
+
+// Google calls this when the key is rejected (wrong referrer, API not allowed, billing off).
+window.gm_authFailure = () => setStatus("Google rejected the key (referrer, API restriction or billing). See the browser console for details.");
+
+function loadMaps(key) {
+  return new Promise((resolve, reject) => {
+    if (window.google?.maps?.importLibrary) return resolve(); // never include the script twice
+    if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
+      return reject(new Error("Maps script already loaded but failed. Reload the page"));
+    }
+    const s = document.createElement("script");
+    // Resolve on Google's own callback: onload can fire before importLibrary is defined.
+    window.__gmReady = resolve;
+    s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&v=weekly&loading=async&callback=__gmReady";
+    s.async = true;
+    s.onerror = () => reject(new Error("Could not load the Google Maps script"));
+    document.head.appendChild(s);
+  });
+}
+
+async function init() {
+  const key = store.get("gmaps_key");
+  if (!key) { $("keybox").hidden = false; return; }
+  $("keybox").hidden = true;
+  try {
+    await loadMaps(key);
+    // Google's docs advise against sequential importLibrary awaits; load the libraries together.
+    const [{ Map }, markerLib, placesLib] = await Promise.all([
+      google.maps.importLibrary("maps"),
+      google.maps.importLibrary("marker"),
+      google.maps.importLibrary("places"),
+    ]);
+    ({ AdvancedMarkerElement } = markerLib);
+    ({ Place } = placesLib);
+    // Open where you left off (browser storage only); falls back to a Europe view.
+    let view = { center: { lat: 46, lng: 8 }, zoom: 5 };
+    try { const v = JSON.parse(store.get("last_view")); if (Number.isFinite(v?.center?.lat) && Number.isFinite(v?.center?.lng) && Number.isFinite(v?.zoom)) view = v; } catch {}
+    map = new Map($("map"), { ...view, mapId: "DEMO_MAP_ID", streetViewControl: false });
+    map.addListener("idle", thinWx);
+    map.addListener("idle", () => scheduleHeat(700));
+    map.addListener("maptypeid_changed", applyBlend);
+    map.addListener("idle", autoSearch);
+    map.addListener("idle", () => store.set("last_view", JSON.stringify({ center: map.getCenter().toJSON(), zoom: map.getZoom() })));
+    $("tools").hidden = false;
+    setStatus("Pan or zoom to an area, then press Search.");
+    locate();
+  } catch (e) {
+    setStatus(e.message + ". Check the key, then reload.");
+    $("keybox").hidden = false;
+  }
+}
+
+$("saveKey").onclick = () => {
+  const v = $("key").value.trim();
+  if (!v) return;
+  store.set("gmaps_key", v);
+  init();
+};
+
+// Toilets work like the other kinds: searched only while ticked. Ticking searches the view; unticking removes the pins.
+$("showToilets").onchange = () => {
+  if ($("showToilets").checked) { $("search").click(); return; }
+  Object.values(toiletMarkers).flat().forEach((m) => (m.map = null));
+  toiletMarkers.google = []; toiletMarkers.osm = [];
+  $("retryOsm").hidden = true;
+  setExtra("");
+  if (!$("detail").hidden && curSpot?.source === "toilet") $("detail").hidden = true;
+};
+// Ticking a kind that wasn't searched yet needs a fresh search; unticking just hides it.
+$("showVan").onchange = $("showCamping").onchange = (e) => { render(); if (e.target.checked) $("search").click(); };
+$("onlyToilet").onchange = () => render();
+
+let meMarker;
+function locate() {
+  if (!navigator.geolocation) { setStatus("This browser can't share your location."); return; }
+  setStatus("Finding your location… allow it if the browser asks.");
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    map.setCenter(here);
+    map.setZoom(12);
+    if (!meMarker) {
+      const dot = document.createElement("div");
+      dot.style.cssText = "width:16px;height:16px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 2px #1a73e8,0 0 0 8px rgba(26,115,232,.25);transform:translateY(50%)";
+      meMarker = new AdvancedMarkerElement({ map, position: here, title: "You are here", content: dot, zIndex: 500 });
+    } else meMarker.position = here;
+    setStatus("Zoomed to your location. Press Search to find spots here.");
+  }, (err) => {
+    const why = {
+      1: "Location is blocked for this page. Click the lock/shield icon in the address bar and allow Location, then press 📍 again.",
+      2: "Your browser could not work out a position. Check macOS System Settings > Privacy & Security > Location Services for this browser; some browsers (e.g. Brave) have no location service and will always fail.",
+      3: "Finding your location took too long. Press 📍 again.",
+    }[err.code] || err.message;
+    setStatus("Could not get your location. " + why + " (" + err.message + ") Or use the box above to go to a place.");
+    console.warn("Geolocation error", err.code, err.message);
+  }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
+}
+$("locate").onclick = locate;
+
+$("gotoBtn").onclick = async () => {
+  const q = $("goto").value.trim();
+  if (!q) return;
+  try {
+    const { places } = await Place.searchByText({ textQuery: q, fields: ["location", "viewport"], maxResultCount: 1 });
+    if (!places.length) { setStatus("No place found for \"" + q + "\"."); return; }
+    places[0].viewport ? map.fitBounds(places[0].viewport) : (map.setCenter(places[0].location), map.setZoom(10));
+  } catch (e) { setStatus("Error: " + e.message); }
+};
+
+// Auto-search: after the map settles, search again when the view moved a quarter of a screen or more, or zoomed in a level or more.
+// Each search is several Places requests (billed), so it only runs from zoom AUTO_MIN_ZOOM and after a 1.2 s pause.
+const AUTO_MIN_ZOOM = 10;
+let lastSearch = null, autoTimer = null;
+function autoSearch() {
+  clearTimeout(autoTimer);
+  if (!map) return;
+  autoTimer = setTimeout(() => {
+    const b = map.getBounds(), z = map.getZoom();
+    if (!b || $("search").disabled) return;
+    if (z < AUTO_MIN_ZOOM) { if (!spots.length) setStatus("Zoom in to see spots (they load automatically from zoom " + AUTO_MIN_ZOOM + ")."); return; }
+    // Moved: the view centre is more than a quarter of the searched span away from the last centre (a small nudge doesn't count).
+    const c = b.getCenter(), lb = lastSearch?.bounds, lc = lb?.getCenter();
+    const span = lb && lb.toSpan();
+    const moved = lb && (Math.abs(c.lat() - lc.lat()) > span.lat() / 4 || Math.abs(c.lng() - lc.lng()) > span.lng() / 4);
+    if (!lastSearch || moved || z >= lastSearch.zoom + 1) $("search").click();
+  }, 1200);
+}
+
+$("search").onclick = async () => {
+  const queries = SEARCHES.filter((q) => (q.includedType === "campground" ? $("showCamping").checked : $("showVan").checked)); // only search the kinds that are ticked
+  const bounds = map.getBounds();
+  if (!bounds) return;
+  lastSearch = { bounds, zoom: map.getZoom() };
+  $("search").disabled = true;
+  const token = ++searchSeq;
+  setStatus("Searching…");
+  try {
+    // A query returns at most 20 places. When it comes back full, search the four quarters of the view as well
+    // (one level only, so a search stays at most 5 requests per query).
+    let capped = false;
+    const searchArea = async (q, b, depth) => {
+      const { places } = await Place.searchByText({ textQuery: q.textQuery, fields: FIELDS, locationRestriction: b, maxResultCount: 20 });
+      if (places.length < 20) return places;
+      if (depth >= 1) { capped = true; return places; }
+      const ne = b.getNorthEast(), sw = b.getSouthWest(), c = b.getCenter();
+      const quads = [
+        { north: ne.lat(), south: c.lat(), east: ne.lng(), west: c.lng() }, { north: ne.lat(), south: c.lat(), east: c.lng(), west: sw.lng() },
+        { north: c.lat(), south: sw.lat(), east: ne.lng(), west: c.lng() }, { north: c.lat(), south: sw.lat(), east: c.lng(), west: sw.lng() },
+      ].map((o) => new globalThis.google.maps.LatLngBounds({ lat: o.south, lng: o.west }, { lat: o.north, lng: o.east }));
+      const parts = await Promise.all(quads.map((qb) => searchArea(q, qb, depth + 1)));
+      return [...new Map([...places, ...parts.flat()].map((p) => [p.id, p])).values()];
+    };
+    const results = await Promise.all(queries.map((q) => searchArea(q, bounds, 0)));
+    const byId = new Map();
+    const via = new Map(); // place id -> place types of the queries that returned it
+    results.forEach((places, i) => places.forEach((p) => {
+      byId.set(p.id, p);
+      via.set(p.id, [...(via.get(p.id) || []), queries[i].includedType]);
+    }));
+    // true/false from Google's opening hours, or undefined when the place lists none.
+    const openNow = new Map([...byId.values()].map((p) => [p.id, isOpenNow(p)]));
+    // Public toilets (map only). Basic fields keep this request cheap.
+    const wantToilets = $("showToilets").checked;
+    const googleToiletsP = !wantToilets ? Promise.resolve(null) : Place.searchByText({ textQuery: "public toilet", includedType: "public_bathroom", fields: ["id", "displayName", "location", "googleMapsURI"], locationRestriction: bounds, maxResultCount: 20 })
+      .then(({ places }) => places)
+      .catch((e) => { console.warn("Toilet search failed:", e.message); return null; });
+    const osmToiletsP = wantToilets ? fetchOsmToilets(bounds) : Promise.resolve(null);
+    let hidden = 0, closed = 0, garages = 0;
+    const google = [...byId.values()]
+      .filter((p) => !isGarage(p, kindOf(p, via.get(p.id)).kind) || (garages++, false))
+      .filter((p) => kindOf(p, via.get(p.id)).kind !== "other" || (hidden++, false))
+      .filter((p) => !(p.businessStatus && p.businessStatus !== "OPERATIONAL") && openNow.get(p.id) !== false || (closed++, false))
+      .map((p) => ({
+        kind: kindOf(p, via.get(p.id)).kind, inferred: kindOf(p, via.get(p.id)).inferred, typeName: p.primaryTypeDisplayName || "", primaryType: p.primaryType || "",
+        open: openNow.get(p.id), id: "g:" + p.id, placeId: p.id, source: "google", name: p.displayName, lat: p.location.lat(), lng: p.location.lng(),
+        address: p.formattedAddress, url: p.googleMapsURI, website: safeUrl(p.websiteURI), toilet: p.hasRestroom, rating: p.rating, count: p.userRatingCount,
+      }));
+    // Keep spots found earlier outside this view, so panning adds spots instead of replacing them; inside the view the new results win.
+    const kept = spots.filter((s) => s.source === "google" && !bounds.contains({ lat: s.lat, lng: s.lng }));
+    const c0 = bounds.getCenter();
+    const oldNear = kept.sort((a, b) => metersBetween(a, c0.toJSON()) - metersBetween(b, c0.toJSON())).slice(0, 400);
+    spots = spots.filter((s) => s.source !== "google").concat(oldNear, google);
+    render();
+    setStatus(google.length + " Google spots" + (hidden ? ", " + hidden + " other businesses hidden" : "") + (closed ? ", " + closed + " closed now hidden" : "") + (garages ? ", " + garages + " garages hidden" : "") + (capped ? " (very dense area: some spots may be missing, zoom in for more)" : "") + ".", true);
+    if (wantToilets) loadToilets(googleToiletsP, osmToiletsP, bounds, token); // not awaited: toilets fill in as they arrive
+    loadPois(bounds);
+  } catch (e) {
+    setStatus("Error: " + e.message);
+  } finally {
+    $("search").disabled = false;
+  }
+};
+
+// Slot for Park4night data: a JSON array of {name, lat, lng, url?, rating?}. Not wired to any live source.
+$("p4nFile").onchange = async (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const p4n = data
+      .filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lng))
+      .map((d, i) => ({ website: safeUrl(d.website), id: "p:" + i, source: "p4n", kind: KINDS[d.kind] ? d.kind : undefined, name: d.name || "Park4night spot", lat: d.lat, lng: d.lng, address: d.address || "", url: d.url, rating: d.rating, count: d.count }));
+    spots = spots.filter((s) => s.source !== "p4n").concat(p4n);
+    render();
+    setStatus(p4n.length + " Park4night spots loaded from file.");
+  } catch (e) { setStatus("Could not read file: " + e.message); }
+};
+
+function pin(source, name, kind) {
+  const el = document.createElement("div");
+  el.className = "pin " + (source === "p4n" ? "p4n" : "google");
+  el.dataset.glyph = KINDS[kind]?.glyph || "";
+  el.classList.add("k-" + kind);
+  if (KINDS[kind]) el.style.background = KINDS[kind].color;
+  const lbl = document.createElement("span");
+  lbl.className = "lbl";
+  lbl.textContent = name;
+  el.append(lbl);
+  return el;
+}
+
+function metersBetween(a, b) {
+  const R = 6371000, rad = Math.PI / 180;
+  const h = Math.sin(((b.lat - a.lat) * rad) / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(((b.lng - a.lng) * rad) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// OpenStreetMap toilets via public Overpass servers, tried in order (the main one is often busy).
+// Each gets its own time limit; null when none answers. Only the visible map area is sent.
+const OVERPASS = [
+  { url: "https://overpass-api.de/api/interpreter", ms: 10000 },
+  { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", ms: 30000 },
+];
+async function fetchOsmToilets(bounds) {
+  const b = bounds.toJSON();
+  if (b.east - b.west > 1.5 || b.north - b.south > 1.5) return { tooWide: true };
+  const q = `[out:json][timeout:25];nwr["amenity"="toilets"](${b.south},${b.west},${b.north},${b.east});out center tags;`;
+  for (const server of OVERPASS) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), server.ms);
+    try {
+      const r = await fetch(server.url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
+      if (!r.ok) continue;
+      return { elements: (await r.json()).elements };
+    } catch (e) {
+      console.warn("OSM toilets failed on " + new URL(server.url).hostname + ":", e.message);
+    } finally { clearTimeout(timer); }
+  }
+  return null;
+}
+
+function osmFacts(t) {
+  const f = [];
+  if (t.fee === "yes") f.push("Paid" + (t.charge ? ": " + t.charge : "")); else if (t.fee === "no") f.push("Free");
+  if (t.access === "customers") f.push("Customers only"); else if (t.access === "private" || t.access === "no") f.push("Not public");
+  if (t.wheelchair === "yes") f.push("Wheelchair accessible"); else if (t.wheelchair === "limited") f.push("Limited wheelchair access"); else if (t.wheelchair === "no") f.push("Not wheelchair accessible");
+  if (t.changing_table === "yes") f.push("Baby changing");
+  if (t.opening_hours) f.push("Hours: " + t.opening_hours);
+  return f;
+}
+
+function drawToilets(list, origin) {
+  toiletMarkers[origin].forEach((m) => (m.map = null));
+  toiletMarkers[origin].length = 0;
+  for (const t of list) {
+    const content = pin("google", t.name, "toilet");
+    content.classList.add("small");
+    const m = new AdvancedMarkerElement({ map, position: { lat: t.lat, lng: t.lng }, title: t.name, content, zIndex: 1 });
+    m.addListener("click", () => showDetail(t));
+    toiletMarkers[origin].push(m);
+  }
+}
+
+// Laundromats, malls and supermarkets: map-only pins, each behind a checkbox (off by default) and searched only while ticked.
+const POIS = {
+  laundry: { box: "showLaundry", type: "laundry", query: "laundromat self service laundry" },
+  mall: { box: "showMalls", type: "shopping_mall", query: "shopping mall" },
+  supermarket: { box: "showSupermarkets", type: "supermarket", query: "supermarket" },
+};
+// Google tags some businesses as shopping malls (a flooring company, a person's shop). Names that look like a company or a goods shop are
+// dropped from the mall results, and any place can be hidden for good from its popup ("Not a mall?").
+const NOT_MALL = /(^|[\s,-])(s\.?r\.?l\.?s?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?p\.?a\.?|gmbh|ltd)($|[\s,.-])|pavimenti|rivestimenti|arredament|mobili|cucine|ceramic|sneaker|boutique|ferramenta|edil|bricolage/i;
+const hiddenPois = new Set((() => { try { return JSON.parse(store.get("hidden_pois") || "[]"); } catch { return []; } })());
+const saveHiddenPois = () => store.set("hidden_pois", JSON.stringify([...hiddenPois]));
+const poiMarkers = { laundry: [], mall: [], supermarket: [] }, poiSeq = { laundry: 0, mall: 0, supermarket: 0 };
+// A query returns at most 20 places and ranks by relevance, so in a big city it fills up there and leaves the rest of the view empty.
+// When it comes back full, search the four quarters of the view as well (one level: at most 5 requests per type).
+async function searchTiled(base, b, depth) {
+  const { places } = await Place.searchByText({ ...base, locationRestriction: b, maxResultCount: 20 });
+  if (places.length < 20 || depth >= 1) return places;
+  const ne = b.getNorthEast(), sw = b.getSouthWest(), c = b.getCenter(), LL = globalThis.google.maps.LatLngBounds;
+  const quads = [[c.lat(), ne.lat(), c.lng(), ne.lng()], [c.lat(), ne.lat(), sw.lng(), c.lng()], [sw.lat(), c.lat(), c.lng(), ne.lng()], [sw.lat(), c.lat(), sw.lng(), c.lng()]]
+    .map(([s0, n0, w0, e0]) => new LL({ lat: s0, lng: w0 }, { lat: n0, lng: e0 }));
+  const parts = await Promise.all(quads.map((q) => searchTiled(base, q, depth + 1)));
+  return [...new Map([...places, ...parts.flat()].map((p) => [p.id, p])).values()];
+}
+async function loadPoi(kind, bounds) {
+  const cfg = POIS[kind], seq = ++poiSeq[kind];
+  poiMarkers[kind].forEach((m) => (m.map = null));
+  poiMarkers[kind] = [];
+  if (!$(cfg.box).checked || !bounds) return;
+  try {
+    const places = await searchTiled({ textQuery: cfg.query, includedType: cfg.type, fields: ["id", "displayName", "location", "googleMapsURI", "rating", "userRatingCount", "websiteURI"] }, bounds, 0);
+    if (seq !== poiSeq[kind] || !$(cfg.box).checked) return; // a newer search or unticking got there first
+    for (const p of places) {
+      if (hiddenPois.has("p:" + p.id) || (kind === "mall" && NOT_MALL.test(p.displayName || ""))) continue;
+      const t = { id: "p:" + p.id, placeId: p.id, source: "poi", origin: "google", kind, name: p.displayName || KINDS[kind].label, url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng(), rating: p.rating, count: p.userRatingCount, website: safeUrl(p.websiteURI) };
+      const content = pin("google", t.name, kind);
+      content.classList.add("small", "poi", "poi-" + kind);
+      const m = new AdvancedMarkerElement({ map, position: { lat: t.lat, lng: t.lng }, title: t.name, content, zIndex: 1 });
+      m.addListener("click", () => showDetail(t));
+      m.poiId = t.id;
+      poiMarkers[kind].push(m);
+    }
+  } catch (e) { console.warn(kind + " search failed:", e.message); }
+}
+const loadPois = (bounds) => Object.keys(POIS).forEach((k) => loadPoi(k, bounds));
+Object.entries(POIS).forEach(([kind, cfg]) => { $(cfg.box).onchange = () => loadPoi(kind, map && map.getBounds()); });
+
+let lastToilets = null; // {bounds, googleList, gNote}: what a manual OSM retry needs
+
+async function loadToilets(googleP, osmP, bounds, token) {
+  const g = await googleP;
+  if (token !== searchSeq) return;
+  const googleList = (g || []).map((p) => ({ id: "t:" + p.id, source: "toilet", origin: "google", kind: "toilet", name: p.displayName || "Public toilet", url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng() }));
+  drawToilets(googleList, "google");
+  const gNote = g ? " " + googleList.length + " Google toilets" + (g.length >= 20 ? " (cap of 20; zoom in for more)" : "") : " Google toilets could not be loaded";
+  lastToilets = { bounds, googleList, gNote };
+  $("retryOsm").hidden = true;
+  setExtra(gNote + ", OSM toilets loading…");
+  handleOsm(await osmP, token);
+}
+
+function handleOsm(o, token) {
+  if (token !== searchSeq || !lastToilets) return;
+  const { googleList, gNote } = lastToilets;
+  if (!o || o.tooWide) {
+    drawToilets([], "osm");
+    setExtra(gNote + (o ? ", OSM toilets: zoom in to load them." : ", OSM toilets unavailable (server busy)."));
+    $("retryOsm").hidden = !!o;
+    return;
+  }
+  $("retryOsm").hidden = true;
+  const osmAll = o.elements.map((e) => ({
+    id: "o:" + e.type + e.id, source: "toilet", origin: "osm", kind: "toilet", name: e.tags?.name || "Public toilet",
+    url: "https://www.openstreetmap.org/" + e.type + "/" + e.id, lat: e.lat ?? e.center?.lat, lng: e.lon ?? e.center?.lon, facts: osmFacts(e.tags || {}),
+  })).filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lng));
+  // Same toilet already known from Google (within 50 m): keep the Google one.
+  const osmList = osmAll.filter((t) => !googleList.some((gt) => metersBetween(t, gt) <= 50));
+  drawToilets(osmList, "osm");
+  setExtra(gNote + " + " + osmList.length + " from OSM" + (osmAll.length > osmList.length ? " (" + (osmAll.length - osmList.length) + " duplicates skipped)" : "") + ".");
+}
+
+$("retryOsm").onclick = async () => {
+  if (!lastToilets) return;
+  const token = searchSeq;
+  $("retryOsm").hidden = true;
+  setExtra(lastToilets.gNote + ", OSM toilets loading…");
+  handleOsm(await fetchOsmToilets(lastToilets.bounds), token);
+};
+
+// Weather: Open-Meteo (no key). One forecast per ~11 km grid cell, 7 days, shared by nearby spots.
+const WX = new Map(); // "lat,lng" cell -> {time[], code[], max[], min[], rain[]}
+let wDay = 0, wxFailedAt = 0, curSpot = null;
+const WMO = [[[0], "☀️", "Clear"], [[1], "🌤️", "Mostly clear"], [[2], "⛅", "Partly cloudy"], [[3], "☁️", "Overcast"], [[45, 48], "🌫️", "Fog"], [[51, 53, 55, 56, 57], "🌦️", "Drizzle"], [[61, 63, 65, 66, 67], "🌧️", "Rain"], [[71, 73, 75, 77, 85, 86], "🌨️", "Snow"], [[80, 81, 82], "🌦️", "Showers"], [[95, 96, 99], "⛈️", "Thunderstorm"]];
+const wmo = (c) => { const m = WMO.find((x) => x[0].includes(c)); return m ? { icon: m[1], text: m[2] } : { icon: "❔", text: "Unknown" }; };
+// Forecasts are per ~22 km cell (0.2°) and 200 m elevation band, so a spot in the mountains gets its own (colder) forecast.
+const ELEV = new Map(); // "lat,lng" (4 decimals) -> metres, from Open-Meteo's elevation API
+const ELEV_MIN = 600;  // spots at or above this get a map bubble even when the weather nearby is similar
+let elevFailedAt = 0;
+const ek = (p) => p.lat.toFixed(4) + "," + p.lng.toFixed(4);
+const elevOf = (p) => ELEV.get(ek(p));
+const wxKey = (lat, lng, el) => (Math.round(lat * 5) / 5).toFixed(1) + "," + (Math.round(lng * 5) / 5).toFixed(1) + (el == null ? "" : "," + Math.round(el / 200) * 200);
+const spotWx = (p) => WX.get(wxKey(p.lat, p.lng, elevOf(p)));
+const isHigh = (p) => (elevOf(p) ?? 0) >= ELEV_MIN;
+const wxDayLabel = (i, long) => {
+  if (i === 0) return "Today";
+  if (i === 1) return "Tomorrow";
+  const d = new Date(); d.setDate(d.getDate() + i);
+  return d.toLocaleDateString("en-GB", long ? { weekday: "long", day: "numeric", month: "short" } : { weekday: "short", day: "numeric" });
+};
+
+// Open-Meteo's free tier allows 600 locations per minute and 5,000 per hour (a request with N locations costs N), and answers 429 beyond that.
+// All its requests go through here, which waits when the last 60 s have used more than 450.
+const omLog = [];
+let omBlockedUntil = 0;
+async function omFetch(url, cost) {
+  for (;;) {
+    const now = Date.now();
+    while (omLog.length && now - omLog[0].t > 60000) omLog.shift();
+    if (!omLog.length || omLog.reduce((a, e) => a + e.cost, 0) + cost <= 450) break;
+    const wait = omLog[0].t + 60000 - now + 100;
+    if ($("heatOn").checked) { const lg = $("legend"); lg.replaceChildren(el("div", "Weather: waiting for the request limit, about " + Math.ceil(wait / 1000) + " s")); lg.hidden = false; }
+    await new Promise((r) => setTimeout(r, wait));
+  }
+  if (Date.now() < omBlockedUntil) return new Response(null, { status: 429 }); // over the hourly limit: don't send anything until it resets
+  omLog.push({ t: Date.now(), cost });
+  const r = await fetch(url);
+  if (r.status === 429) omBlockedUntil = Date.now() + (parseInt(r.headers.get("Retry-After")) || 600) * 1000;
+  return r;
+}
+
+// Tell the user when the weather service is over its hourly limit, so a missing heat map or weather isn't a silent failure.
+function showWxPaused() {
+  if (Date.now() >= omBlockedUntil) return;
+  const lg = $("legend");
+  lg.replaceChildren(el("div", "Weather paused: hourly limit reached, resumes about " + new Date(omBlockedUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })));
+  lg.hidden = false;
+}
+
+async function loadElevations(points) {
+  const need = [...new Map(points.filter((p) => !ELEV.has(ek(p))).map((p) => [ek(p), p])).values()];
+  if (!need.length || Date.now() - elevFailedAt < 30000) return;
+  try {
+    for (let i = 0; i < need.length; i += 100) {
+      const chunk = need.slice(i, i + 100);
+      const r = await omFetch("https://api.open-meteo.com/v1/elevation?latitude=" + chunk.map((p) => p.lat.toFixed(4)).join(",") + "&longitude=" + chunk.map((p) => p.lng.toFixed(4)).join(","), chunk.length);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      (await r.json()).elevation.forEach((e, n) => ELEV.set(ek(chunk[n]), e));
+    }
+    saveCaches();
+  } catch (e) { elevFailedAt = Date.now(); console.warn("Elevation unavailable:", e.message); } // weather then falls back to the cell's own elevation
+}
+
+async function loadWeather(points) {
+  await loadElevations(points);
+  updateWx(); // mountain icons only need the elevation
+  const need = [...new Set(points.map((p) => wxKey(p.lat, p.lng, elevOf(p))))].filter((k) => !WX.has(k));
+  if (!need.length || Date.now() - wxFailedAt < 30000) { updateWx(); return; }
+  try {
+    // Requests carry an elevation list only when every location in them has one.
+    const groups = [need.filter((k) => k.split(",").length === 3), need.filter((k) => k.split(",").length === 2)];
+    for (const group of groups) {
+      for (let i = 0; i < group.length; i += 40) {
+        const chunk = group.slice(i, i + 40);
+        const parts = chunk.map((k) => k.split(","));
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=" + parts.map((x) => x[0]).join(",") + "&longitude=" + parts.map((x) => x[1]).join(",") +
+          (parts[0].length === 3 ? "&elevation=" + parts.map((x) => x[2]).join(",") : "") +
+          "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7";
+        const r = await omFetch(url, chunk.length);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const j = await r.json();
+        (Array.isArray(j) ? j : [j]).forEach((x, n) => WX.set(chunk[n], { time: x.daily.time, code: x.daily.weather_code, max: x.daily.temperature_2m_max, min: x.daily.temperature_2m_min, rain: x.daily.precipitation_probability_max }));
+      }
+    }
+  } catch (e) {
+    wxFailedAt = Date.now(); console.warn("Weather unavailable:", e.message);
+    setTimeout(() => loadWeather(points), 31000); // Open-Meteo answers 503 now and then: retry once after the cool-down
+  }
+  saveCaches();
+  updateWx();
+}
+
+function wxText(w, i) {
+  const m = wmo(w.code[i]);
+  return m.icon + " " + Math.round(w.max[i]) + "° / " + Math.round(w.min[i]) + "°";
+}
+
+function updateWx() {
+  document.querySelectorAll("#days button").forEach((b) => b.classList.toggle("on", +b.dataset.i === wDay));
+  document.querySelectorAll(".wx[data-sid]").forEach((e) => {
+    const sp = spots.find((x) => x.id === e.dataset.sid);
+    const w = sp && spotWx(sp);
+    e.textContent = w ? (isHigh(sp) ? "⛰ " : "") + wxText(w, wDay) : "";
+    if (w) e.title = wmo(w.code[wDay]).text + ", high / low, rain chance " + w.rain[wDay] + "%" + (isHigh(sp) ? ", mountain spot" : "");
+  });
+  markers.forEach((m, id) => { const sp = spots.find((x) => x.id === id); m.content.classList.toggle("high", !!sp && isHigh(sp)); });
+  if (curSpot && !$("detail").hidden) fillWxBox(curSpot);
+  thinWx();
+  scheduleHeat(150);
+}
+
+// Temperature map: daily highs and lows on a grid over the view (Open-Meteo, no key), drawn as labelled temperature bands under the pins.
+const HEAT = new Map(); // "step|lat|lng" -> 7 daily highs
+const HEAT_STEPS = [0.1, 0.2, 0.5, 1, 2, 5];
+
+// Cache across reloads, so reopening the page doesn't spend the hourly request budget again: elevations never expire,
+// forecasts and heat-map grids are kept for 3 hours.
+const CACHE_KEY = "om_cache_v1", CACHE_TTL = 3 * 3600 * 1000, stamps = new Map(); // "w|key" / "h|key" -> time stored
+(function loadCaches() {
+  try {
+    const c = JSON.parse(store.get(CACHE_KEY) || "{}"), now = Date.now();
+    for (const [k, [t, v]] of Object.entries(c.w || {})) if (now - t < CACHE_TTL) { WX.set(k, v); stamps.set("w|" + k, t); }
+    for (const [k, [t, v]] of Object.entries(c.h || {})) if (now - t < CACHE_TTL && v.rain) { HEAT.set(k, v); stamps.set("h|" + k, t); }
+    for (const [k, v] of Object.entries(c.e || {})) ELEV.set(k, v);
+  } catch { /* unreadable cache: start empty */ }
+})();
+let saveTimer = null;
+function saveCaches() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const now = Date.now(), c = { w: {}, h: {}, e: {} };
+    const pack = (m, tag, out) => m.forEach((v, k) => { if (!stamps.has(tag + k)) stamps.set(tag + k, now); const t = stamps.get(tag + k); if (now - t < CACHE_TTL) out[k] = [t, v]; });
+    pack(WX, "w|", c.w); pack(HEAT, "h|", c.h);
+    ELEV.forEach((v, k) => { c.e[k] = v; });
+    store.set(CACHE_KEY, JSON.stringify(c));
+  }, 2000);
+}
+let heatMode = "max", heatGrid = null, heatSeq = 0, heatFailedAt = 0, heatTimer = null;
+function heatAt(lat, lng, m = heatMode === "rain" ? "max" : heatMode) { // bilinear value of the grid (high or low) at a point, or null outside it
+  const g = heatGrid;
+  if (!g) return null;
+  const y = (lat - g.lat0) / g.step, x = (lng - g.lng0) / g.step;
+  const i = Math.floor(y), j = Math.floor(x);
+  if (i < 0 || j < 0 || i >= g.rows - 1 || j >= g.cols - 1) return null;
+  const fy = y - i, fx = x - j, v = g[m];
+  return v[i][j] * (1 - fy) * (1 - fx) + v[i + 1][j] * fy * (1 - fx) + v[i][j + 1] * (1 - fy) * fx + v[i + 1][j + 1] * fy * fx;
+}
+function scheduleHeat(ms) { clearTimeout(heatTimer); heatTimer = setTimeout(updateHeat, ms); }
+function clearHeat() {
+  if (heatOverlay) heatOverlay.setMap(null);
+  heatOverlay = null;
+  heatLabels.forEach((m) => (m.map = null));
+  heatLabels = [];
+  heatGrid = null;
+  $("legend").hidden = true;
+}
+async function updateHeat() {
+  if (!$("heatOn").checked) { heatSeq++; clearHeat(); thinWx(); return; } // off: no overlay, no grid requests
+  const b = map && map.getBounds();
+  if (!b) return;
+  const seq = ++heatSeq, ne = b.getNorthEast(), sw = b.getSouthWest();
+  const latSpan = ne.lat() - sw.lat(), lngSpan = ((ne.lng() - sw.lng()) + 360) % 360 || 360;
+  const step = HEAT_STEPS.find((st) => (Math.ceil(latSpan / st) + 3) * (Math.ceil(lngSpan / st) + 3) <= 70) || 5;
+  const lat0 = Math.floor(sw.lat() / step) * step - step, lng0 = Math.floor(sw.lng() / step) * step - step;
+  const rows = Math.ceil(latSpan / step) + 3, cols = Math.ceil(lngSpan / step) + 3;
+  const pt = (i, j) => [+(lat0 + i * step).toFixed(4), +(lng0 + j * step).toFixed(4)];
+  const key = (i, j) => { const [la, ln] = pt(i, j); return step + "|" + la + "|" + ln; };
+  const missing = [];
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) if (!HEAT.has(key(i, j))) missing.push([i, j]);
+  if (missing.length && Date.now() - heatFailedAt < 30000) return;
+  if (missing.length) { const lg = $("legend"); lg.replaceChildren(el("div", "Loading heat map…")); lg.hidden = false; }
+  try {
+    for (let n = 0; n < missing.length; n += 50) {
+      const chunk = missing.slice(n, n + 50), pts = chunk.map(([i, j]) => pt(i, j));
+      const r = await omFetch("https://api.open-meteo.com/v1/forecast?latitude=" + pts.map((q) => q[0]).join(",") + "&longitude=" + pts.map((q) => q[1]).join(",") + "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=7", pts.length);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      (Array.isArray(j) ? j : [j]).forEach((x, k) => HEAT.set(key(...chunk[k]), { max: x.daily.temperature_2m_max, min: x.daily.temperature_2m_min, rain: x.daily.precipitation_sum, prob: x.daily.precipitation_probability_max }));
+    }
+  } catch (e) { heatFailedAt = Date.now(); console.warn("Heat map unavailable:", e.message); showWxPaused(); scheduleHeat(31000); return; }
+  saveCaches();
+  if (seq !== heatSeq) return; // the view changed while loading
+  const grid = (m) => Array.from({ length: rows }, (_, i) => Array.from({ length: cols }, (_, j) => HEAT.get(key(i, j))[m][wDay]));
+  heatGrid = { step, lat0, lng0, rows, cols, max: grid("max"), min: grid("min"), rain: grid("rain"), prob: grid("prob") };
+  try { drawHeat(); } catch (e) { console.error("Heat map drawing failed:", e); const lg = $("legend"); lg.replaceChildren(el("div", "Heat map error: " + e.message)); lg.hidden = false; }
+  thinWx();
+}
+// Area map: a smooth colour field that follows the shape of the temperature, with each area (2° band) labelled with its high / low.
+// Colours are relative to the values in view, so small differences still show; the numbers carry the exact values.
+const REL_STOPS = [[0, [70, 130, 230]], [0.2, [110, 200, 235]], [0.4, [190, 240, 200]], [0.6, [255, 240, 120]], [0.8, [255, 160, 90]], [1, [240, 80, 70]]];
+function relColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 1; i < REL_STOPS.length; i++) if (t <= REL_STOPS[i][0]) { const [t0, c0] = REL_STOPS[i - 1], [t1, c1] = REL_STOPS[i], f = (t - t0) / (t1 - t0); return c0.map((c, k) => Math.round(c + (c1[k] - c) * f)); }
+  return REL_STOPS[REL_STOPS.length - 1][1];
+}
+// Rain: fixed scale in mm per day (not relative to the view). Stops are spaced evenly along the legend, values are interpolated between them.
+const RAIN_VALS = [0, 1, 3, 8, 15, 30];
+const RAIN_COLS = [[255, 255, 255], [190, 230, 255], [110, 185, 245], [50, 120, 225], [110, 60, 175], [60, 20, 100]];
+function rainColor(v) {
+  if (v <= 0) return RAIN_COLS[0];
+  for (let i = 1; i < RAIN_VALS.length; i++) if (v <= RAIN_VALS[i]) { const f = (v - RAIN_VALS[i - 1]) / (RAIN_VALS[i] - RAIN_VALS[i - 1]); return RAIN_COLS[i - 1].map((c, k) => Math.round(c + (RAIN_COLS[i][k] - c) * f)); }
+  return RAIN_COLS[RAIN_COLS.length - 1];
+}
+let heatLabels = [], heatOverlay = null;
+const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+const mercLat = (y) => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
+function heatSample(g, m, lat, lng) {
+  const gi = Math.min(Math.max((lat - g.lat0) / g.step, 0), g.rows - 1.0001), gj = Math.min(Math.max((lng - g.lng0) / g.step, 0), g.cols - 1.0001);
+  const i = Math.floor(gi), j = Math.floor(gj), q = g[m];
+  let fy = gi - i, fx = gj - j;
+  fy = fy * fy * (3 - 2 * fy); fx = fx * fx * (3 - 2 * fx); // smoothstep weights: rounder shapes, no diamond kinks
+  return q[i][j] * (1 - fy) * (1 - fx) + q[i + 1][j] * fy * (1 - fx) + q[i][j + 1] * (1 - fy) * fx + q[i + 1][j + 1] * fy * fx;
+}
+
+// General labels follow the differences: candidates on a fine screen grid are taken most extreme first, and a label is kept only if
+// it is at least MIN_PX from the others and either differs from every label within FAR_PX by DIFF (1.5° / 3 mm) or lies beyond FAR_PX.
+// So steep changes get many labels, flat areas get few. Spots that already show a bubble block the spot under them.
+let wxShownPx = []; // screen positions of the spot bubbles currently shown (set by thinWx)
+function placeHeatLabels() {
+  heatLabels.forEach((m) => (m.map = null));
+  heatLabels = [];
+  const g = heatGrid, proj = map && map.getProjection();
+  if (!g || !proj || !$("heatOn").checked) return;
+  const scale = 2 ** map.getZoom(), view = map.getBounds(), rain = heatMode === "rain", STEP = 45, MIN_PX = 90, FAR_PX = 230, DIFF = rain ? 3 : 1.5, MAX = 90;
+  const sw = view.getSouthWest(), ne = view.getNorthEast();
+  const tl = proj.fromLatLngToPoint(new google.maps.LatLng(ne.lat(), sw.lng())), br = proj.fromLatLngToPoint(new google.maps.LatLng(sw.lat(), ne.lng()));
+  const south = g.lat0, north = g.lat0 + (g.rows - 1) * g.step, west = g.lng0, east = g.lng0 + (g.cols - 1) * g.step;
+  const cand = [];
+  for (let cy = Math.floor(tl.y * scale / STEP); cy <= Math.floor(br.y * scale / STEP); cy++) for (let cx = Math.floor(tl.x * scale / STEP); cx <= Math.floor(br.x * scale / STEP); cx++) {
+    const x = (cx + 0.5) * STEP, y = (cy + 0.5) * STEP;
+    if (wxShownPx.some((q) => Math.abs(q.x - x) < 75 && Math.abs(q.y - y) < 22)) continue; // a spot bubble is already there
+    const ll = proj.fromPointToLatLng(new google.maps.Point(x / scale, y / scale)), lat = ll.lat(), lng = ll.lng();
+    if (!view.contains(ll) || lat < south || lat > north || lng < west || lng > east) continue;
+    const v = heatSample(g, rain ? "rain" : heatMode, lat, lng);
+    if (rain && v < 0.2) continue; // dry areas get no label
+    cand.push({ x, y, lat, lng, v });
+  }
+  if (!cand.length) return;
+  const mean = cand.reduce((a, c) => a + c.v, 0) / cand.length;
+  cand.sort((a, b) => (rain ? b.v - a.v : Math.abs(b.v - mean) - Math.abs(a.v - mean)));
+  const kept = [];
+  for (const c of cand) {
+    if (kept.length >= MAX) break;
+    let ok = true;
+    for (const k of kept) {
+      const d = Math.hypot(c.x - k.x, c.y - k.y);
+      if (d < MIN_PX || (d < FAR_PX && Math.abs(c.v - k.v) < DIFF)) { ok = false; break; }
+    }
+    if (ok) kept.push(c);
+  }
+  for (const c of kept) {
+    const text = rain
+      ? (c.v < 10 ? c.v.toFixed(1) : Math.round(c.v)) + " mm · " + Math.round(heatSample(g, "prob", c.lat, c.lng)) + "%"
+      : Math.round(heatSample(g, "max", c.lat, c.lng)) + "° / " + Math.round(heatSample(g, "min", c.lat, c.lng)) + "°";
+    heatLabels.push(new AdvancedMarkerElement({ map, position: { lat: c.lat, lng: c.lng }, content: el("div", text, "cell"), zIndex: -1 }));
+  }
+}
+
+// Blend mode multiply keeps names, roads and lakes readable (darken and colour were tried). Google adds the overlay <img> a moment
+// after setMap, and may re-create it, so a MutationObserver sets the mode on every overlay image that appears.
+function applyBlend() {
+  const mode = ["satellite", "hybrid"].includes(map.getMapTypeId()) ? "normal" : "multiply"; // multiply on dark imagery would hide the colours
+  document.querySelectorAll('#map img[src^="data:image/png"]').forEach((i) => (i.style.mixBlendMode = mode));
+}
+new MutationObserver(applyBlend).observe($("map"), { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+
+function drawHeat() {
+  const g = heatGrid;
+  if (!g) return;
+  const rainMode = heatMode === "rain";
+  const all = g[rainMode ? "max" : heatMode].flat(); // the temperature range only matters for the temperature modes
+  const vmin = Math.min(...all), vmax = Math.max(...all), mid = (vmin + vmax) / 2, span = Math.max(vmax - vmin, 4);
+
+  const south = g.lat0, north = g.lat0 + (g.rows - 1) * g.step, west = g.lng0, east = g.lng0 + (g.cols - 1) * g.step;
+  const f = Math.max(2, Math.min(10, Math.floor(700 / Math.max(g.rows, g.cols))));
+  const w = (g.cols - 1) * f + 1;
+  const y0 = mercY(south), y1 = mercY(north);
+  const h = Math.max(2, Math.round(w * (y1 - y0) / ((east - west) * Math.PI / 180)));
+  const rowLat = (y) => mercLat(y1 - (y1 - y0) * y / (h - 1)); // canvas row 0 is the north edge, spaced evenly in map (Mercator) space
+  const sample = (m, lat, lng) => heatSample(g, m, lat, lng);
+  const val = new Float32Array(w * h); // value per pixel (colours blend smoothly)
+  for (let y = 0; y < h; y++) {
+    const lat = rowLat(y);
+    for (let x = 0; x < w; x++) { const t = sample(heatMode, lat, west + (east - west) * x / (w - 1)); val[y * w + x] = t; }
+  }
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(w, h);
+  for (let n = 0; n < w * h; n++) {
+    const c = rainMode ? rainColor(val[n]) : relColor((val[n] - (mid - span / 2)) / span), o = n * 4;
+    img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const next = new google.maps.GroundOverlay(cv.toDataURL(), { south, north, west, east }, { opacity: 0.55, clickable: false });
+  next.setMap(map);
+  if (heatOverlay) heatOverlay.setMap(null);
+  heatOverlay = next;
+  applyBlend();
+  [100, 500, 1500].forEach((ms) => setTimeout(applyBlend, ms)); // belt and braces: the image may arrive after the observer's last look
+
+  const lg = $("legend");
+  if (rainMode) {
+    const bar = el("div", null, "bar"); bar.style.background = "linear-gradient(to right," + RAIN_COLS.map((c, k) => "rgb(" + c.join(",") + ") " + (k / (RAIN_COLS.length - 1) * 100) + "%").join(",") + ")";
+    const ticks = el("div", null, "ticks");
+    RAIN_VALS.forEach((v, k) => { if (k < RAIN_VALS.length - 1) { const tk = el("span", v + (k === RAIN_VALS.length - 2 ? " mm" : "")); tk.style.left = (k / (RAIN_VALS.length - 1) * 100) + "%"; ticks.append(tk); } });
+    const col = el("div", null, "col");
+    col.append(el("div", "Rain per day · " + wxDayLabel(wDay)), bar, ticks);
+    lg.replaceChildren(col);
+    lg.hidden = false;
+    return;
+  }
+  const grad = REL_STOPS.map(([t, c]) => "rgb(" + c.join(",") + ") " + (t * 100) + "%").join(",");
+  const bar = el("div", null, "bar"); bar.style.background = "linear-gradient(to right," + grad + ")";
+  const ticks = el("div", null, "ticks");
+  [[0, mid - span / 2], [50, mid], [100, mid + span / 2]].forEach(([left, val]) => { const tk = el("span", Math.round(val) + "°"); tk.style.left = left + "%"; ticks.append(tk); });
+  const col = el("div", null, "col");
+  col.append(el("div", (heatMode === "min" ? "Daily low · " : "Daily high · ") + wxDayLabel(wDay)), bar, ticks);
+  lg.replaceChildren(col);
+  lg.hidden = false;
+}
+
+// Map bubbles: one per 150 px cell of screen (larger cells below zoom 9), so they are spread evenly. Within a cell, temperature outliers (3° or more away from the
+// heat map at that point; without a grid: from the median of nearby spots) win, then mountain spots, then the most central spot.
+function thinWx() {
+  if (!map) return;
+  const R = 250 * 156543 * Math.cos(map.getCenter().lat() * Math.PI / 180) / 2 ** map.getZoom();
+  const items = [];
+  markers.forEach((m, id) => {
+    const chip = m.content.querySelector(".wxpin");
+    const s = spots.find((x) => x.id === id);
+    const w = s && spotWx(s);
+    if (chip && w) items.push({ chip, s, t: w[heatMode === "rain" ? "max" : heatMode][wDay], icon: wmo(w.code[wDay]).icon, sig: wxText(w, wDay) });
+  });
+  items.forEach((it) => {
+    const base = heatAt(it.s.lat, it.s.lng);
+    if (base != null) { it.out = Math.abs(it.t - base) >= 3; return; }
+    const nb = items.filter((o) => o !== it && metersBetween(o.s, it.s) < R).map((o) => o.t).sort((a, b) => a - b);
+    it.out = nb.length >= 2 && Math.abs(it.t - nb[Math.floor(nb.length / 2)]) >= 3;
+  });
+  // Spread evenly: the view is cut into ~150 px cells and each cell shows one bubble. Outliers win, then mountain spots,
+  // then the spot nearest the cell centre.
+  const proj = map.getProjection(), scale = 2 ** map.getZoom(), CELL = map.getZoom() >= 9 ? 150 : 150 + (9 - map.getZoom()) * 45, best = new Map(); // fewer spot bubbles when zoomed far out: the general labels take over
+  if (!proj) return;
+  for (const it of items) {
+    const wp = proj.fromLatLngToPoint(new google.maps.LatLng(it.s.lat, it.s.lng)), x = wp.x * scale, y = wp.y * scale;
+    const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL), key = cx + "," + cy;
+    const rank = it.out ? 0 : isHigh(it.s) ? 1 : 2, dist = (x - (cx + 0.5) * CELL) ** 2 + (y - (cy + 0.5) * CELL) ** 2;
+    const cur = best.get(key);
+    if (!cur || rank < cur.rank || (rank === cur.rank && dist < cur.dist)) best.set(key, { it, rank, dist });
+  }
+  const winners = new Set([...best.values()].map((b) => b.it));
+  items.forEach((it) => it.chip.classList.toggle("skip", !winners.has(it)));
+  wxShownPx = [...winners].map((it) => { const wp = proj.fromLatLngToPoint(new google.maps.LatLng(it.s.lat, it.s.lng)); return { x: wp.x * scale, y: wp.y * scale }; });
+  placeHeatLabels();
+}
+
+function fillWxBox(s) {
+  const box = $("wxbox");
+  if (!box) return;
+  const w = spotWx(s);
+  box.replaceChildren();
+  if (!w) { box.append(el("div", "Weather unavailable.", "meta")); return; }
+  const m = wmo(w.code[wDay]);
+  box.append(el("div", m.icon + " " + m.text + " · " + Math.round(w.max[wDay]) + "° / " + Math.round(w.min[wDay]) + "°", "now"));
+  box.append(el("div", wxDayLabel(wDay, true) + " · high / low · rain chance " + w.rain[wDay] + "%" + (isHigh(s) ? " · ⛰ mountain spot" : ""), "meta"));
+  const strip = el("div", null); strip.id = "wxstrip";
+  for (let i = 0; i < w.code.length; i++) {
+    const b = el("button", null); b.dataset.i = i; b.className = i === wDay ? "on" : "";
+    b.append(el("div", wxDayLabel(i).split(" ")[0].slice(0, 3)), el("div", wmo(w.code[i]).icon), el("div", Math.round(w.max[i]) + "°"));
+    b.onclick = () => { wDay = i; updateWx(); };
+    strip.append(b);
+  }
+  box.append(strip);
+}
+
+$("heatOn").onchange = () => { $("hlrow").hidden = !$("heatOn").checked; scheduleHeat(0); };
+$("hl").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  heatMode = b.dataset.m;
+  document.querySelectorAll("#hl button").forEach((x) => x.classList.toggle("on", x === b));
+  scheduleHeat(0);
+};
+
+$("moreBtn").onclick = () => { const o = $("more").classList.toggle("open"); $("moreBtn").setAttribute("aria-expanded", o); };
+const daysBox = $("days");
+for (let i = 0; i < 7; i++) {
+  const b = el("button", wxDayLabel(i)); b.dataset.i = i;
+  b.onclick = () => { wDay = i; updateWx(); };
+  daysBox.append(b);
+}
+
+function render() {
+  markers.forEach((m) => (m.map = null));
+  markers.clear();
+  const list = $("list");
+  list.replaceChildren();
+  const order = Object.keys(KINDS); // camping, rv, camper parking, parking, other
+  spots.sort((a, b) => (order.indexOf(a.kind) - order.indexOf(b.kind)) || ((b.rating ?? 0) - (a.rating ?? 0)));
+  const showCamping = $("showCamping").checked, showVan = $("showVan").checked;
+  const onlyToilet = $("onlyToilet").checked;
+  const VAN = ["rv", "camperpark", "parking", "reststop"];
+  const shown = spots.filter((s) => !(s.kind === "camping" ? !showCamping : VAN.includes(s.kind) && !showVan) && !(onlyToilet && s.toilet !== true));
+  if (!shown.some((s) => !$("detail").hidden && $("detail").querySelector("h2")?.textContent === s.name)) $("detail").hidden = true;
+  for (const s of shown) {
+    const m = new AdvancedMarkerElement({ map, position: { lat: s.lat, lng: s.lng }, title: s.name, content: pin(s.source, s.name, s.kind) });
+    m.addListener("click", () => select(s.id, false));
+    m.content.append(el("span", "⛰", "mt"));
+    const wxp = el("span", null, "wx wxpin"); wxp.dataset.sid = s.id;
+    m.content.append(wxp);
+    markers.set(s.id, m);
+
+    const li = document.createElement("li");
+    li.dataset.id = s.id;
+    const name = el("div", null, "name");
+    name.append(el("span", s.source === "p4n" ? "P" : "G", "tag " + (s.source === "p4n" ? "p4n" : "google")), el("span", s.name));
+    const badges = el("div", null, "badges");
+    if (s.kind && KINDS[s.kind]) {
+      const kind = el("span", KINDS[s.kind].label + (s.inferred ? "*" : ""), "kind");
+      if (s.inferred) kind.title = "Inferred: Google's own category is " + (s.typeName || "unknown");
+      kind.style.background = KINDS[s.kind].color;
+      kind.style.borderColor = KINDS[s.kind].color;
+      kind.style.color = "#fff";
+      badges.append(kind);
+    }
+    if (s.source === "google") badges.append(el("span", s.open ? "Open now" : "Hours unknown", "kind " + (s.open ? "open" : "")));
+    if (s.toilet === true) badges.append(el("span", "🚻 Toilet", "kind wc"));
+    else if (s.toilet === false) badges.append(el("span", "No toilet", "kind"));
+    const meta = el("div", s.rating ? "★ " + s.rating + (s.count ? " (" + s.count + ")" : "") : "No rating", "meta");
+    const wxe = el("span", null, "wx"); wxe.dataset.sid = s.id;
+    meta.prepend(wxe);
+    li.append(name, badges, meta);
+    const links = el("div", null, "links");
+    const addLink = (href, text) => {
+      if (!href) return;
+      const a = el("a", text);
+      a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer"; a.onclick = (e) => e.stopPropagation();
+      links.append(a);
+    };
+    addLink(s.website, "Website ↗");
+    addLink(s.url, s.source === "p4n" ? "Park4night ↗" : "Google Maps ↗");
+    li.append(links);
+    li.onclick = () => select(s.id, true);
+    list.append(li);
+  }
+  updateWx();
+  loadWeather(shown);
+}
+
+function select(id, pan) {
+  document.querySelectorAll("#list li").forEach((li) => li.classList.toggle("active", li.dataset.id === id));
+  const li = document.querySelector('#list li[data-id="' + CSS.escape(id) + '"]');
+  if (li) li.scrollIntoView({ block: "nearest" });
+  markers.forEach((m, mid) => {
+    const on = mid === id;
+    m.content.classList.toggle("sel", on);
+    m.zIndex = on ? 1000 : 0;
+  });
+  const s = spots.find((x) => x.id === id);
+  if (pan && s) {
+    map.panTo({ lat: s.lat, lng: s.lng });
+    if (map.getZoom() < 13) map.setZoom(13);
+  }
+  if (s) showDetail(s);
+}
+
+const detailCache = new Map(); // placeId -> {summary, reviews}
+
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text != null) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function stars(n) { return n ? "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n)) : ""; }
+
+async function showDetail(s) {
+  const box = $("detail");
+  box.hidden = false;
+  const close = el("button", "×", "close");
+  close.onclick = () => { box.hidden = true; };
+  const head = el("h2", s.name);
+  const origin = s.origin || s.source;
+  const badge = el("span", origin === "p4n" ? "P" : origin === "osm" ? "OSM" : "G", "tag " + (origin === "p4n" ? "p4n" : origin === "osm" ? "osm" : "google"));
+  if (origin === "osm") badge.title = "OpenStreetMap";
+  const top = el("div", null, "top");
+  top.append(badge, head);
+  const meta = el("div", [(KINDS[s.kind] ? KINDS[s.kind].glyph + " " + KINDS[s.kind].label : ""), s.rating ? "★ " + s.rating : (s.source === "toilet" ? "" : "No rating"), s.count ? s.count + " reviews" : ""].filter(Boolean).join(" · "), "meta");
+  box.replaceChildren(close, top, meta);
+  curSpot = s;
+  const wbox = el("div", null); wbox.id = "wxbox";
+  box.append(wbox);
+  fillWxBox(s);
+  loadWeather([s]);
+  (s.facts || []).forEach((f) => box.append(el("div", f, "meta")));
+  if (s.source === "google") box.append(el("div", s.open ? "Open now" : "Opening hours not listed by Google", "meta"));
+  if (s.typeName) box.append(el("div", "Google category: " + s.typeName + (s.inferred ? " (counted as camping because of its lodging tag or name)" : ""), "meta"));
+  if (s.website) { const w = el("a", "Website: " + siteName(s.website) + " ↗"); w.href = s.website; w.target = "_blank"; w.rel = "noopener noreferrer"; const wp = el("p"); wp.append(w); box.append(wp); }
+  if (s.url) { const a = el("a", "Open in " + (s.source === "p4n" ? "Park4night" : s.origin === "osm" ? "OpenStreetMap" : "Google Maps")); a.href = s.url; a.target = "_blank"; a.rel = "noopener"; const p = el("p"); p.append(a); box.append(p); }
+  if (s.source === "poi") {
+    const row = el("p");
+    const btn = el("button", "Not a " + KINDS[s.kind].label.toLowerCase() + "? Hide this place");
+    btn.onclick = () => {
+      hiddenPois.add(s.id); saveHiddenPois();
+      poiMarkers[s.kind].filter((m) => m.poiId === s.id).forEach((m) => (m.map = null));
+      row.replaceChildren(el("span", "Hidden. ", "meta"));
+      const undo = el("button", "Undo");
+      undo.onclick = () => { hiddenPois.delete(s.id); saveHiddenPois(); loadPoi(s.kind, map.getBounds()); row.replaceChildren(el("span", "Restored.", "meta")); };
+      row.append(undo);
+    };
+    row.append(btn);
+    box.append(row);
+  }
+  if (s.source !== "google" && s.source !== "poi") return; // toilets have no description or reviews
+  if (s.toilet === true) box.append(el("div", "🚻 Toilet available (per Google)", "meta"));
+  else if (s.toilet === false) box.append(el("div", "No toilet (per Google)", "meta"));
+
+  const note = el("p", "Loading description and reviews…", "meta");
+  box.append(note);
+  try {
+    let d = detailCache.get(s.placeId);
+    if (!d) {
+      const place = new Place({ id: s.placeId });
+      await place.fetchFields({ fields: ["editorialSummary", "reviews"] });
+      d = { summary: place.editorialSummary || "", reviews: place.reviews || [] };
+      detailCache.set(s.placeId, d);
+    }
+    if (box.querySelector("h2")?.textContent !== s.name) return; // user already picked another spot
+    note.remove();
+    box.append(el("p", d.summary || "No description from Google for this place."));
+    // Google returns at most 5 reviews (most relevant); show the 2 newest of those.
+    const newest = [...d.reviews].sort((a, b) => (b.publishTime ?? 0) - (a.publishTime ?? 0)).slice(0, 2);
+    box.append(el("strong", "Newest reviews"));
+    if (!newest.length) box.append(el("p", "No reviews returned.", "meta"));
+    for (const r of newest) {
+      const wrap = el("div", null, "rev");
+      wrap.append(el("div", stars(r.rating) + "  " + (r.relativePublishTimeDescription || ""), "meta"));
+      const t = r.text || r.originalText || "";
+      wrap.append(el("div", t.length > 320 ? t.slice(0, 320) + "…" : (t || "(no text)")));
+      wrap.append(el("div", "— " + (r.authorAttribution?.displayName || "Google user"), "meta"));
+      box.append(wrap);
+    }
+  } catch (e) {
+    note.textContent = "Could not load details: " + e.message;
+  }
+}
+
+init();
+// Installable app: the service worker needs https (or localhost).
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
