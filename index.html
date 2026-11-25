@@ -91,18 +91,33 @@
   #legend .ticks span { position: absolute; top: 0; transform: translateX(-50%); }
   .cell { padding: 1px 5px; font-size: 12px; font-weight: 700; color: #111; white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
   #keybox { padding: 16px; }
-  #moreBtn { display: none; }
+  #moreBtn, .sheet-head { display: none; }
   @media (max-width: 760px) {
-    body { grid-template-columns: 1fr; grid-template-rows: 52vh 1fr; grid-template-rows: 52dvh 1fr; height: 100vh; height: 100dvh; }
-    #mapwrap { order: -1; height: 52vh; height: 52dvh; }
+    body { grid-template-columns: 1fr; grid-template-rows: 62vh 1fr; grid-template-rows: 62dvh 1fr; height: 100vh; height: 100dvh; }
+    #mapwrap { order: -1; height: 62vh; height: 62dvh; }
     aside { border-right: 0; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-    .controls { padding: 8px 12px; gap: 6px; }
+    .controls { padding: 6px 10px; gap: 4px; }
     .controls h1 { display: none; }
+    #tools .row { flex-wrap: nowrap; }
+    #tools .row + .row { margin-top: 6px !important; }
+    #goto { min-width: 0; }
+    #search { flex: 1; }
     #moreBtn { display: inline-block; }
-    #more { display: none; }
-    #more.open { display: block; max-height: 32vh; overflow-y: auto; }
-    #list li { padding: 10px 12px; }
+    #status { font-size: 11px; line-height: 1.3; max-height: 2.6em; overflow: hidden; }
+    #retryOsm { padding: 3px 8px; font-size: 12px; }
+    #list li { padding: 8px 12px; }
     #detail { left: 8px; bottom: 8px; width: calc(100% - 16px); max-height: 70%; }
+    /* Settings: a bottom sheet over the list, so it doesn't push the list off the screen */
+    #more { display: none; }
+    #more.open { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; max-height: 62vh; max-height: 62dvh; overflow-y: auto; background: var(--panel); border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,.4); padding: 0 12px calc(12px + env(safe-area-inset-bottom)); }
+    #more .sheet-head { display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--panel); padding: 10px 0 6px; z-index: 1; }
+    #more .row { flex-wrap: wrap; }
+    #more .row:first-of-type { margin-top: 0 !important; }
+    #more .chk { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+    #more .p4n-row { display: none; }
+    #days { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 2px; }
+    #days button { flex: none; }
+    #more #days { flex: 1; min-width: 0; }
   }
 </style>
 </head>
@@ -126,13 +141,14 @@
         <button id="moreBtn" aria-expanded="false">⚙ Settings</button>
       </div>
       <div id="more">
+      <div class="sheet-head"><strong>Settings</strong><button id="moreClose">Done</button></div>
       <div class="row" style="margin-top:10px">
         <span class="meta">Weather</span><div id="days"></div>
       </div>
       <div class="row" id="hlrow" style="margin-top:6px" hidden>
         <span class="meta">Map shows</span><div id="hl"><button data-m="max" class="on">Daily high</button><button data-m="min">Daily low</button><button data-m="rain">Rain</button></div>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row chk" style="margin-top:10px">
         <label title="Motorhome aires, camper parking, regular parking and rest stops"><input type="checkbox" id="showVan" checked> Van stops</label>
         <label title="Campsites"><input type="checkbox" id="showCamping"> Campsites</label>
         <label title="Temperature areas on the map, with daily high / low numbers"><input type="checkbox" id="heatOn"> Heat map</label>
@@ -142,7 +158,7 @@
         <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
         <label title="Only spots where Google says there is a toilet; spots with no toilet info are hidden"><input type="checkbox" id="onlyToilet"> Only with toilet</label>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row p4n-row" style="margin-top:10px">
         <label>Park4night file <input type="file" id="p4nFile" accept=".json,application/json"></label>
       </div>
       </div>
@@ -285,6 +301,7 @@ async function init() {
     map.addListener("idle", () => scheduleHeat(700));
     map.addListener("maptypeid_changed", applyBlend);
     map.addListener("idle", autoSearch);
+    map.addListener("click", () => setSheet(false)); // tap the map to close the mobile settings sheet
     map.addListener("idle", () => store.set("last_view", JSON.stringify({ center: map.getCenter().toJSON(), zoom: map.getZoom() })));
     $("tools").hidden = false;
     setStatus("Pan or zoom to an area, then press Search.");
@@ -986,7 +1003,9 @@ $("hl").onclick = (e) => {
   scheduleHeat(0);
 };
 
-$("moreBtn").onclick = () => { const o = $("more").classList.toggle("open"); $("moreBtn").setAttribute("aria-expanded", o); };
+const setSheet = (open) => { $("more").classList.toggle("open", open); $("moreBtn").setAttribute("aria-expanded", open); };
+$("moreBtn").onclick = () => setSheet(!$("more").classList.contains("open"));
+$("moreClose").onclick = () => setSheet(false);
 const daysBox = $("days");
 for (let i = 0; i < 7; i++) {
   const b = el("button", wxDayLabel(i)); b.dataset.i = i;
