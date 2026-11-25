@@ -109,7 +109,7 @@
     #tools .row { flex-wrap: nowrap; }
     #tools .row + .row { margin-top: 6px !important; }
     #goto { min-width: 0; }
-    #search { flex: 1; }
+    #searchrow { display: none; } /* on a phone the map searches by itself; the hidden button is still used by the code */
     #moreBtn { display: inline-block; }
     #status { font-size: 11px; line-height: 1.3; max-height: 2.6em; overflow: hidden; }
     #status.summary { display: none; }
@@ -145,10 +145,10 @@
         <input type="text" id="goto" placeholder="Go to a place (e.g. Algarve)" style="flex:1">
         <button id="gotoBtn">Go</button>
         <button id="locate" title="Zoom to my location">📍</button>
+        <button id="moreBtn" aria-expanded="false" aria-label="Settings" title="Settings">⚙</button>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" id="searchrow" style="margin-top:10px">
         <button class="primary" id="search">Search this area</button>
-        <button id="moreBtn" aria-expanded="false">⚙ Settings</button>
       </div>
       <div id="more">
       <div class="sheet-head"><strong>Settings</strong><button id="moreClose">Done</button></div>
@@ -569,11 +569,16 @@ function drawToilets(list, origin) {
 const POIS = {
   laundry: { box: "showLaundry", type: "laundry", query: "laundromat self service laundry" },
   mall: { box: "showMalls", type: "shopping_mall", query: "shopping mall" },
-  supermarket: { box: "showSupermarkets", type: "supermarket", query: "supermarket" },
+  supermarket: { box: "showSupermarkets", type: "supermarket", query: "supermarket" }, // see bigSupermarket() for what is kept
 };
 // Google tags some businesses as shopping malls (a flooring company, a person's shop). Names that look like a company or a goods shop are
 // dropped from the mall results, and any place can be hidden for good from its popup ("Not a mall?").
 const NOT_MALL = /(^|[\s,-])(s\.?r\.?l\.?s?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?p\.?a\.?|gmbh|ltd)($|[\s,.-])|pavimenti|rivestimenti|arredament|mobili|cucine|ceramic|sneaker|boutique|ferramenta|edil|bricolage/i;
+// Supermarkets: Google also returns corner shops and greengrocers under this type. Kept: open now, Google category supermarket or
+// hypermarket, at least 100 reviews (a size proxy), and no greengrocer or small-format (express, city, mini, 24h) names.
+const NOT_BIG_SUPERMARKET = /fruter[ií]a|frutter[ií]a|fruttivendol|ortofrutta|verduler|greengrocer|\bexpr[eé]s+\b|\bcity\b|\bmini\b|\b24\s?h\b/i;
+const bigSupermarket = (p) => ["supermarket", "hypermarket"].includes(p.primaryType) && (p.userRatingCount || 0) >= 100 && isOpenNow(p) === true
+  && (!p.businessStatus || p.businessStatus === "OPERATIONAL") && !NOT_BIG_SUPERMARKET.test(p.displayName || "");
 const hiddenPois = new Set((() => { try { return JSON.parse(store.get("hidden_pois") || "[]"); } catch { return []; } })());
 const saveHiddenPois = () => store.set("hidden_pois", JSON.stringify([...hiddenPois]));
 const poiMarkers = { laundry: [], mall: [], supermarket: [] }, poiSeq = { laundry: 0, mall: 0, supermarket: 0 };
@@ -594,10 +599,10 @@ async function loadPoi(kind, bounds) {
   poiMarkers[kind] = [];
   if (!$(cfg.box).checked || !bounds) return;
   try {
-    const places = await searchTiled({ textQuery: cfg.query, includedType: cfg.type, fields: ["id", "displayName", "location", "googleMapsURI", "rating", "userRatingCount", "websiteURI"] }, bounds, 0);
+    const places = await searchTiled({ textQuery: cfg.query, includedType: cfg.type, fields: ["id", "displayName", "location", "googleMapsURI", "rating", "userRatingCount", "websiteURI"].concat(kind === "supermarket" ? ["primaryType", "regularOpeningHours", "currentOpeningHours", "utcOffsetMinutes", "businessStatus"] : []) }, bounds, 0);
     if (seq !== poiSeq[kind] || !$(cfg.box).checked) return; // a newer search or unticking got there first
     for (const p of places) {
-      if (hiddenPois.has("p:" + p.id) || (kind === "mall" && NOT_MALL.test(p.displayName || ""))) continue;
+      if (hiddenPois.has("p:" + p.id) || (kind === "mall" && NOT_MALL.test(p.displayName || "")) || (kind === "supermarket" && !bigSupermarket(p))) continue;
       const t = { id: "p:" + p.id, placeId: p.id, source: "poi", origin: "google", kind, name: p.displayName || KINDS[kind].label, url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng(), rating: p.rating, count: p.userRatingCount, website: safeUrl(p.websiteURI) };
       const content = pin("google", t.name, kind);
       content.classList.add("small", "poi", "poi-" + kind);
