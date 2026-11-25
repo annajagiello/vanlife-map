@@ -186,7 +186,7 @@
           <span class="meta">Day</span><div id="days"></div>
         </div>
         <div class="row" id="hlrow" style="margin-top:6px">
-          <span class="meta">Map shows</span><div id="hl"><button data-m="max" class="on">Daily high</button><button data-m="min">Daily low</button><button data-m="rain">Rain</button></div>
+          <span class="meta">Map shows</span><div id="hl"><button data-m="max">Daily high</button><button data-m="min" class="on">Daily low</button><button data-m="rain">Rain</button></div>
         </div>
       </div>
       <div class="row p4n-row" style="margin-top:10px">
@@ -814,7 +814,7 @@ function saveCaches() {
     store.set(CACHE_KEY, JSON.stringify(c));
   }, 2000);
 }
-let heatMode = "max", heatGrid = null, heatSeq = 0, heatFailedAt = 0, heatTimer = null;
+let heatMode = "min", heatGrid = null, heatSeq = 0, heatFailedAt = 0, heatTimer = null;
 function heatAt(lat, lng, m = heatMode === "rain" ? "max" : heatMode) { // bilinear value of the grid (high or low) at a point, or null outside it
   const g = heatGrid;
   if (!g) return null;
@@ -1096,7 +1096,7 @@ for (let i = 0; i < 7; i++) {
   $("mapDays").append(b);
 }
 [["max", "High"], ["min", "Low"], ["rain", "Rain"]].forEach(([m, t]) => {
-  const b = el("button", t); b.dataset.m = m; b.className = m === "max" ? "on" : "";
+  const b = el("button", t); b.dataset.m = m; b.className = m === heatMode ? "on" : "";
   b.onclick = () => setMode(m);
   $("mapMode").append(b);
 });
