@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Vanlife Map</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%232f6b4f'/%3E%3Cpath%20d='M8%2042V27a4%204%200%200%201%204-4h25l13%2011h6a4%204%200%200%201%204%204v4z'%20fill='%23fff'/%3E%3Cpath%20d='M39%2027l8%207h-8z'%20fill='%232f6b4f'/%3E%3Ccircle%20cx='21'%20cy='43'%20r='6'%20fill='%232f6b4f'%20stroke='%23fff'%20stroke-width='3'/%3E%3Ccircle%20cx='47'%20cy='43'%20r='6'%20fill='%232f6b4f'%20stroke='%23fff'%20stroke-width='3'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20rx=%2214%22%20fill=%22%232f6b4f%22/%3E%3Cpath%20d=%22M15%2022l3-7.5h15l3%207.5z%22%20fill=%22%23fff%22/%3E%3Cpath%20d=%22M8%2046V25l2-3h28l13%209%206%202v13z%22%20fill=%22%23fff%22/%3E%3Cpath%20d=%22M15.5%2022h20.5%22%20stroke=%22%232f6b4f%22%20stroke-width=%221.1%22/%3E%3Cpath%20d=%22M40.5%2025.5l7%205.5h-7z%22%20fill=%22%232f6b4f%22/%3E%3Crect%20x=%2223%22%20y=%2226%22%20width=%2213%22%20height=%226%22%20rx=%221.5%22%20fill=%22%232f6b4f%22/%3E%3Crect%20x=%2211.5%22%20y=%2226%22%20width=%228%22%20height=%226%22%20rx=%221.5%22%20fill=%22%232f6b4f%22/%3E%3Crect%20x=%228%22%20y=%2235.5%22%20width=%2249%22%20height=%222.3%22%20fill=%22%232f6b4f%22/%3E%3Ccircle%20cx=%2220%22%20cy=%2246%22%20r=%228%22%20fill=%22%232f6b4f%22/%3E%3Ccircle%20cx=%2246%22%20cy=%2246%22%20r=%228%22%20fill=%22%232f6b4f%22/%3E%3Ccircle%20cx=%2220%22%20cy=%2246%22%20r=%226%22%20fill=%22%23fff%22/%3E%3Ccircle%20cx=%2246%22%20cy=%2246%22%20r=%226%22%20fill=%22%23fff%22/%3E%3Ccircle%20cx=%2220%22%20cy=%2246%22%20r=%222.6%22%20fill=%22%232f6b4f%22/%3E%3Ccircle%20cx=%2246%22%20cy=%2246%22%20r=%222.6%22%20fill=%22%232f6b4f%22/%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #fafaf7; --panel: #ffffff; --text: #1d2420; --muted: #66706a; --line: #dfe3dc;
@@ -1194,6 +1194,7 @@ const FAV_KEYS = ["id", "source", "origin", "kind", "name", "lat", "lng", "url",
 const favs = new Map((() => { try { return Object.entries(JSON.parse(store.get("favourites") || "{}")); } catch { return []; } })());
 const saveFavs = () => store.set("favourites", JSON.stringify(Object.fromEntries(favs)));
 let favMarkers = [];
+document.querySelectorAll("#more .chk input").forEach((i) => i.addEventListener("change", () => markFavs())); // follow the type boxes
 function toggleFav(s) {
   if (favs.has(s.id)) favs.delete(s.id);
   else favs.set(s.id, Object.fromEntries(FAV_KEYS.filter((k) => s[k] !== undefined).map((k) => [k, s[k]])));
@@ -1201,6 +1202,9 @@ function toggleFav(s) {
   markFavs();
   return favs.has(s.id);
 }
+// A favourite only shows while its type is ticked in the settings (Van stops, Campsites, Toilets, Laundromats, Malls, Supermarkets).
+const TYPE_BOX = { camping: "showCamping", toilet: "showToilets", laundry: "showLaundry", mall: "showMalls", supermarket: "showSupermarkets" };
+const favTypeOn = (kind) => $(TYPE_BOX[kind] || "showVan").checked; // every other kind (aire, camper parking, parking, rest stop) is a van stop
 // Star badge on every pin that is a favourite, plus a pin for each favourite that has none in the current results.
 function markFavs() {
   if (!map) return;
@@ -1209,7 +1213,7 @@ function markFavs() {
   favMarkers = [];
   const present = new Set([...document.querySelectorAll(".pin[data-id]:not(.fav-own)")].map((e) => e.dataset.id));
   for (const [id, f] of favs) {
-    if (present.has(id)) continue;
+    if (present.has(id) || !favTypeOn(f.kind)) continue;
     const content = pin(f.source === "p4n" ? "p4n" : "google", f.name, f.kind, id);
     content.classList.add("is-fav", "fav-own");
     if (f.source === "toilet" || f.source === "poi") content.classList.add("small");
