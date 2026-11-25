@@ -2,7 +2,7 @@
   "name": "Vanlife Map",
   "short_name": "Vanlife Map",
   "description": "Find camper and motorhome spots with weather",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#141815",
