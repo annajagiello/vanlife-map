@@ -91,11 +91,17 @@
   #legend .ticks { position: relative; height: 12px; color: var(--muted); }
   #legend .ticks span { position: absolute; top: 0; transform: translateX(-50%); }
   .cell { padding: 1px 5px; font-size: 12px; font-weight: 700; color: #111; white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
+  #detail .favbtn { position: absolute; top: 8px; right: 44px; padding: 2px 8px; font-size: 16px; line-height: 1.2; }
+  #detail .favbtn.on { color: #f59f00; border-color: #f59f00; }
+  .pin.is-fav::after { content: "★"; position: absolute; top: -10px; left: -11px; width: 18px; height: 18px; border-radius: 50%; background: #fcc419; color: #111; border: 1px solid #111; font-size: 11px; line-height: 16px; text-align: center; pointer-events: none; }
   #keybox { padding: 16px; }
   .sect { margin-top: 12px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
   #more .sect:first-of-type { margin-top: 8px; }
   #wxopts.off { display: none; } /* the day and map options only take space while the heat map is on */
   #panelToggle { display: none; }
+  #fsBtn { position: absolute; right: 10px; top: 10px; z-index: 6; width: 40px; height: 40px; padding: 0; font-size: 20px; line-height: 1; border-radius: 2px; background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  #mapwrap.fs { position: fixed; inset: 0; z-index: 100; height: auto; } /* where the Fullscreen API is missing (iPhone) */
+  #mapwrap:fullscreen { background: var(--bg); }
   #moreBtn, .sheet-head { display: none; }
   @media (max-width: 760px) {
     body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; height: 100dvh; }
@@ -184,7 +190,7 @@
   </div>
   <ul id="list"></ul>
 </aside>
-<div id="mapwrap"><div id="map"></div><button id="panelToggle" aria-label="Hide controls" title="Hide controls">⌄</button><div id="legend" hidden></div><div id="detail" hidden></div></div>
+<div id="mapwrap"><div id="map"></div><button id="fsBtn" aria-label="Full screen" title="Full screen">⛶</button><button id="panelToggle" aria-label="Hide controls" title="Hide controls">⌄</button><div id="legend" hidden></div><div id="detail" hidden></div></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -313,7 +319,7 @@ async function init() {
     // Open where you left off (browser storage only); falls back to a Europe view.
     let view = { center: { lat: 46, lng: 8 }, zoom: 5 };
     try { const v = JSON.parse(store.get("last_view")); if (Number.isFinite(v?.center?.lat) && Number.isFinite(v?.center?.lng) && Number.isFinite(v?.zoom)) view = v; } catch {}
-    map = new Map($("map"), { ...view, mapId: "DEMO_MAP_ID", streetViewControl: false });
+    map = new Map($("map"), { ...view, mapId: "DEMO_MAP_ID", streetViewControl: false, fullscreenControl: false });
     map.addListener("idle", thinWx);
     map.addListener("idle", () => scheduleHeat(700));
     map.addListener("maptypeid_changed", applyBlend);
@@ -500,8 +506,9 @@ $("p4nFile").onchange = async (ev) => {
   } catch (e) { setStatus("Could not read file: " + e.message); }
 };
 
-function pin(source, name, kind) {
+function pin(source, name, kind, id) {
   const el = document.createElement("div");
+  if (id) el.dataset.id = id;
   el.className = "pin " + (source === "p4n" ? "p4n" : "google");
   el.dataset.glyph = KINDS[kind]?.glyph || "";
   el.classList.add("k-" + kind);
@@ -557,12 +564,13 @@ function drawToilets(list, origin) {
   toiletMarkers[origin].forEach((m) => (m.map = null));
   toiletMarkers[origin].length = 0;
   for (const t of list) {
-    const content = pin("google", t.name, "toilet");
+    const content = pin("google", t.name, "toilet", t.id);
     content.classList.add("small");
     const m = new AdvancedMarkerElement({ map, position: { lat: t.lat, lng: t.lng }, title: t.name, content, zIndex: 1 });
     m.addListener("click", () => showDetail(t));
     toiletMarkers[origin].push(m);
   }
+  markFavs();
 }
 
 // Laundromats, malls and supermarkets: map-only pins, each behind a checkbox (off by default) and searched only while ticked.
@@ -575,9 +583,9 @@ const POIS = {
 // dropped from the mall results, and any place can be hidden for good from its popup ("Not a mall?").
 const NOT_MALL = /(^|[\s,-])(s\.?r\.?l\.?s?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?p\.?a\.?|gmbh|ltd)($|[\s,.-])|pavimenti|rivestimenti|arredament|mobili|cucine|ceramic|sneaker|boutique|ferramenta|edil|bricolage/i;
 // Supermarkets: Google also returns corner shops and greengrocers under this type. Kept: open now, Google category supermarket or
-// hypermarket, at least 100 reviews (a size proxy), and no greengrocer or small-format (express, city, mini, 24h) names.
-const NOT_BIG_SUPERMARKET = /fruter[ií]a|frutter[ií]a|fruttivendol|ortofrutta|verduler|greengrocer|\bexpr[eé]s+\b|\bcity\b|\bmini\b|\b24\s?h\b/i;
-const bigSupermarket = (p) => ["supermarket", "hypermarket"].includes(p.primaryType) && (p.userRatingCount || 0) >= 100 && isOpenNow(p) === true
+// hypermarket, and no greengrocer or small-format (city, mini) names.
+const NOT_BIG_SUPERMARKET = /fruter[ií]a|frutter[ií]a|fruttivendol|ortofrutta|verduler|greengrocer|\bcity\b|\bmini\b/i;
+const bigSupermarket = (p) => ["supermarket", "hypermarket"].includes(p.primaryType) && isOpenNow(p) === true
   && (!p.businessStatus || p.businessStatus === "OPERATIONAL") && !NOT_BIG_SUPERMARKET.test(p.displayName || "");
 const hiddenPois = new Set((() => { try { return JSON.parse(store.get("hidden_pois") || "[]"); } catch { return []; } })());
 const saveHiddenPois = () => store.set("hidden_pois", JSON.stringify([...hiddenPois]));
@@ -604,13 +612,14 @@ async function loadPoi(kind, bounds) {
     for (const p of places) {
       if (hiddenPois.has("p:" + p.id) || (kind === "mall" && NOT_MALL.test(p.displayName || "")) || (kind === "supermarket" && !bigSupermarket(p))) continue;
       const t = { id: "p:" + p.id, placeId: p.id, source: "poi", origin: "google", kind, name: p.displayName || KINDS[kind].label, url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng(), rating: p.rating, count: p.userRatingCount, website: safeUrl(p.websiteURI) };
-      const content = pin("google", t.name, kind);
+      const content = pin("google", t.name, kind, t.id);
       content.classList.add("small", "poi", "poi-" + kind);
       const m = new AdvancedMarkerElement({ map, position: { lat: t.lat, lng: t.lng }, title: t.name, content, zIndex: 1 });
       m.addListener("click", () => showDetail(t));
       m.poiId = t.id;
       poiMarkers[kind].push(m);
     }
+    markFavs();
   } catch (e) { console.warn(kind + " search failed:", e.message); }
 }
 const loadPois = (bounds) => Object.keys(POIS).forEach((k) => loadPoi(k, bounds));
@@ -1050,6 +1059,12 @@ $("hl").onclick = (e) => {
 const setSheet = (open) => { $("more").classList.toggle("open", open); $("moreBtn").setAttribute("aria-expanded", open); };
 $("moreBtn").onclick = () => setSheet(!$("more").classList.contains("open"));
 $("moreClose").onclick = () => setSheet(false);
+// Full screen on the whole map area (map + popup + legend), not only the map div, so a tapped pin can still show its card.
+$("fsBtn").onclick = () => {
+  const wrap = $("mapwrap");
+  if (document.fullscreenEnabled) { if (document.fullscreenElement) document.exitFullscreen(); else wrap.requestFullscreen().catch(() => wrap.classList.add("fs")); }
+  else wrap.classList.toggle("fs");
+};
 $("panelToggle").onclick = () => { // phone: hide / show the whole control bar to give the map the full screen
   const hide = !document.body.classList.contains("nopanel");
   document.body.classList.toggle("nopanel", hide);
@@ -1077,7 +1092,7 @@ function render() {
   const shown = spots.filter((s) => !(s.kind === "camping" ? !showCamping : VAN.includes(s.kind) && !showVan) && !(onlyToilet && s.toilet !== true));
   if (!shown.some((s) => !$("detail").hidden && $("detail").querySelector("h2")?.textContent === s.name)) $("detail").hidden = true;
   for (const s of shown) {
-    const m = new AdvancedMarkerElement({ map, position: { lat: s.lat, lng: s.lng }, title: s.name, content: pin(s.source, s.name, s.kind) });
+    const m = new AdvancedMarkerElement({ map, position: { lat: s.lat, lng: s.lng }, title: s.name, content: pin(s.source, s.name, s.kind, s.id) });
     m.addListener("click", () => select(s.id, false));
     m.content.append(el("span", "⛰", "mt"));
     const wxp = el("span", null, "wx wxpin"); wxp.dataset.sid = s.id;
@@ -1119,6 +1134,7 @@ function render() {
   }
   updateWx();
   loadWeather(shown);
+  markFavs();
 }
 
 function select(id, pan) {
@@ -1149,11 +1165,48 @@ function el(tag, text, cls) {
 
 function stars(n) { return n ? "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n)) : ""; }
 
+let detailSeq = 0; // a second tap on the same pin must not append the reviews twice
+// Favourites: saved in this browser only (localStorage), each with what's needed to draw its pin and open its card again,
+// so a favourite stays on the map even when it is outside the current search results.
+const FAV_KEYS = ["id", "source", "origin", "kind", "name", "lat", "lng", "url", "website", "rating", "count", "placeId", "toilet", "typeName", "inferred", "facts"];
+const favs = new Map((() => { try { return Object.entries(JSON.parse(store.get("favourites") || "{}")); } catch { return []; } })());
+const saveFavs = () => store.set("favourites", JSON.stringify(Object.fromEntries(favs)));
+let favMarkers = [];
+function toggleFav(s) {
+  if (favs.has(s.id)) favs.delete(s.id);
+  else favs.set(s.id, Object.fromEntries(FAV_KEYS.filter((k) => s[k] !== undefined).map((k) => [k, s[k]])));
+  saveFavs();
+  markFavs();
+  return favs.has(s.id);
+}
+// Star badge on every pin that is a favourite, plus a pin for each favourite that has none in the current results.
+function markFavs() {
+  if (!map) return;
+  document.querySelectorAll(".pin[data-id]").forEach((e) => e.classList.toggle("is-fav", favs.has(e.dataset.id)));
+  favMarkers.forEach((m) => (m.map = null));
+  favMarkers = [];
+  const present = new Set([...document.querySelectorAll(".pin[data-id]:not(.fav-own)")].map((e) => e.dataset.id));
+  for (const [id, f] of favs) {
+    if (present.has(id)) continue;
+    const content = pin(f.source === "p4n" ? "p4n" : "google", f.name, f.kind, id);
+    content.classList.add("is-fav", "fav-own");
+    if (f.source === "toilet" || f.source === "poi") content.classList.add("small");
+    const m = new AdvancedMarkerElement({ map, position: { lat: f.lat, lng: f.lng }, title: f.name, content, zIndex: 900 });
+    m.addListener("click", () => showDetail(f));
+    favMarkers.push(m);
+  }
+}
+
 async function showDetail(s) {
+  const seq = ++detailSeq;
   const box = $("detail");
   box.hidden = false;
   const close = el("button", "×", "close");
   close.onclick = () => { box.hidden = true; };
+  const star = el("button", favs.has(s.id) ? "★" : "☆", "favbtn");
+  star.title = favs.has(s.id) ? "Remove from favourites" : "Add to favourites";
+  star.onclick = () => { const on = toggleFav(s); star.textContent = on ? "★" : "☆"; star.title = on ? "Remove from favourites" : "Add to favourites"; star.classList.toggle("on", on); };
+  star.classList.toggle("on", favs.has(s.id));
   const head = el("h2", s.name);
   const origin = s.origin || s.source;
   const badge = el("span", origin === "p4n" ? "P" : origin === "osm" ? "OSM" : "G", "tag " + (origin === "p4n" ? "p4n" : origin === "osm" ? "osm" : "google"));
@@ -1161,7 +1214,7 @@ async function showDetail(s) {
   const top = el("div", null, "top");
   top.append(badge, head);
   const meta = el("div", [(KINDS[s.kind] ? KINDS[s.kind].glyph + " " + KINDS[s.kind].label : ""), s.rating ? "★ " + s.rating : (s.source === "toilet" ? "" : "No rating"), s.count ? s.count + " reviews" : ""].filter(Boolean).join(" · "), "meta");
-  box.replaceChildren(close, top, meta);
+  box.replaceChildren(close, star, top, meta);
   curSpot = s;
   const wbox = el("div", null); wbox.id = "wxbox";
   box.append(wbox);
@@ -1200,7 +1253,7 @@ async function showDetail(s) {
       d = { summary: place.editorialSummary || "", reviews: place.reviews || [] };
       detailCache.set(s.placeId, d);
     }
-    if (box.querySelector("h2")?.textContent !== s.name) return; // user already picked another spot
+    if (seq !== detailSeq) return; // a newer tap took over
     note.remove();
     box.append(el("p", d.summary || "No description from Google for this place."));
     // Google returns at most 5 reviews (most relevant); show the 2 newest of those.
