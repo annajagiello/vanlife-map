@@ -102,10 +102,11 @@
   #more .sect:first-of-type { margin-top: 8px; }
   #wxopts.off { display: none; } /* the day and map options only take space while the heat map is on */
   #panelToggle { display: none; }
-  #wxbar { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); z-index: 5; display: grid; gap: 4px; justify-items: center; padding: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  #wxbar { position: absolute; top: 60px; left: 10px; z-index: 5; display: flex; flex-direction: column; gap: 6px; padding: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
   #wxbar[hidden] { display: none; }
-  #mapDays, #mapMode { display: flex; gap: 3px; }
-  #wxbar button { padding: 2px 5px; font-size: 11px; line-height: 1.15; min-width: 34px; }
+  #mapDays, #mapMode { display: flex; flex-direction: column; gap: 3px; }
+  #mapMode { border-top: 1px solid var(--line); padding-top: 6px; }
+  #wxbar button { padding: 3px 6px; font-size: 11px; line-height: 1.15; white-space: nowrap; }
   #wxbar button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   #fsBtn { position: absolute; right: 10px; top: 10px; z-index: 6; width: 40px; height: 40px; padding: 0; font-size: 20px; line-height: 1; border-radius: 2px; background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
   #mapwrap.fs { position: fixed; inset: 0; z-index: 100; height: auto; } /* where the Fullscreen API is missing (iPhone) */
@@ -1090,9 +1091,7 @@ for (let i = 0; i < 7; i++) {
 }
 // The same choices on the map itself, shown while the heat map is on, so the settings don't need opening to change day or what is shown.
 for (let i = 0; i < 7; i++) {
-  const l = wxDayLabel(i), parts = i < 2 ? [i === 0 ? "Today" : "Tmrw"] : l.split(" ");
-  const b = el("button", null); b.dataset.i = i; b.title = wxDayLabel(i, true);
-  parts.forEach((t) => b.append(el("div", t)));
+  const b = el("button", i < 2 ? (i === 0 ? "Today" : "Tmrw") : wxDayLabel(i)); b.dataset.i = i; b.title = wxDayLabel(i, true);
   b.onclick = () => { wDay = i; updateWx(); };
   $("mapDays").append(b);
 }
