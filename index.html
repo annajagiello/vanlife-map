@@ -110,6 +110,7 @@
     #search { flex: 1; }
     #moreBtn { display: inline-block; }
     #status { font-size: 11px; line-height: 1.3; max-height: 2.6em; overflow: hidden; }
+    #status.summary { display: none; }
     #retryOsm { padding: 3px 8px; font-size: 12px; }
     #list li { padding: 8px 12px; }
     #detail { left: 8px; bottom: 8px; width: calc(100% - 16px); max-height: 70%; }
@@ -269,8 +270,9 @@ function safeUrl(u) {
 function siteName(u) { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return "Website"; } }
 
 let statusMain = "", statusExtra = "";
-function setStatus(t, keepExtra) { statusMain = t; if (!keepExtra) statusExtra = ""; $("status").textContent = statusMain + statusExtra; }
-function setExtra(t) { statusExtra = t; $("status").textContent = statusMain + statusExtra; }
+function paintStatus() { $("status").textContent = statusMain + statusExtra; $("status").classList.toggle("summary", /^\d/.test(statusMain)); } // "26 Google spots, …" summaries are hidden on phones
+function setStatus(t, keepExtra) { statusMain = t; if (!keepExtra) statusExtra = ""; paintStatus(); }
+function setExtra(t) { statusExtra = t; paintStatus(); }
 
 // Google calls this when the key is rejected (wrong referrer, API not allowed, billing off).
 window.gm_authFailure = () => setStatus("Google rejected the key (referrer, API restriction or billing). See the browser console for details.");
