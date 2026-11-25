@@ -59,6 +59,7 @@
   #detail a { color: var(--google); }
   .pin { position: relative; width: 24px; height: 24px; border-radius: 50%; border: 0; box-shadow: 0 1px 4px rgba(0,0,0,.45); opacity: 1; transform: translateY(50%); }
   .pin::before { content: attr(data-glyph); position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; line-height: 1; }
+  .pin[data-glyph="P"]::before { color: #fff; font: 800 15px/1 system-ui, sans-serif; } /* plain letter: the 🅿️ emoji draws its own blue square */
   .pin.sel::before { font-size: 20px; }
   .pin.small { width: 24px; height: 24px; border-width: 0; }
   .pin.small.poi::before { font-size: 13px; letter-spacing: 0; } /* higher specificity than .pin.small::before below */
@@ -97,8 +98,9 @@
   #wxopts.off button { cursor: default; }
   #moreBtn, .sheet-head { display: none; }
   @media (max-width: 760px) {
-    body { grid-template-columns: 1fr; grid-template-rows: 62vh 1fr; grid-template-rows: 62dvh 1fr; height: 100vh; height: 100dvh; }
-    #mapwrap { order: -1; height: 62vh; height: 62dvh; }
+    body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; height: 100dvh; }
+    #mapwrap { order: -1; height: auto; min-height: 0; }
+    #list { display: none; } /* on a phone the spots are read from the map */
     aside { border-right: 0; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
     .controls { padding: 6px 10px; gap: 4px; }
     .controls h1 { display: none; }
@@ -201,8 +203,8 @@ const SEARCHES = [
 const KINDS = {
   camping: { label: "Camping", glyph: "⛺", color: "#2b8a3e" },
   rv: { label: "RV park / aire", glyph: "🚐", color: "#7048e8" },
-  camperpark: { label: "Camper parking", glyph: "🅿️", color: "#d9480f" },
-  parking: { label: "Parking", glyph: "🅿️", color: "#5c6b7a" },
+  camperpark: { label: "Camper parking", glyph: "P", color: "#d9480f" },
+  parking: { label: "Parking", glyph: "P", color: "#5c6b7a" },
   reststop: { label: "Rest stop", glyph: "🛣️", color: "#1971c2" },
   other: { label: "Other business", glyph: "?", color: "#868e96" },
   toilet: { label: "Public toilet", glyph: "WC", color: "#0b7285" },
@@ -346,25 +348,41 @@ let meMarker;
 function locate() {
   if (!navigator.geolocation) { setStatus("This browser can't share your location."); return; }
   setStatus("Finding your location… allow it if the browser asks.");
-  navigator.geolocation.getCurrentPosition((pos) => {
+  let first = null; // the quick position (a recent one the device already has)
+  const show = (pos, recentre) => {
     const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    map.setCenter(here);
-    map.setZoom(12);
+    if (recentre) { map.setCenter(here); map.setZoom(12); }
     if (!meMarker) {
       const dot = document.createElement("div");
       dot.style.cssText = "width:16px;height:16px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 2px #1a73e8,0 0 0 8px rgba(26,115,232,.25);transform:translateY(50%)";
       meMarker = new AdvancedMarkerElement({ map, position: here, title: "You are here", content: dot, zIndex: 500 });
     } else meMarker.position = here;
-    setStatus("Zoomed to your location. Press Search to find spots here.");
-  }, (err) => {
+    return here;
+  };
+  const fail = (err) => {
     const why = {
-      1: "Location is blocked for this page. Click the lock/shield icon in the address bar and allow Location, then press 📍 again.",
-      2: "Your browser could not work out a position. Check macOS System Settings > Privacy & Security > Location Services for this browser; some browsers (e.g. Brave) have no location service and will always fail.",
+      1: "Location is blocked for this page. Allow Location for this site in the browser or phone settings, then press 📍 again.",
+      2: "Your device could not work out a position. Check that Location Services is on for this browser. Some browsers (e.g. Brave) have none and will always fail.",
       3: "Finding your location took too long. Press 📍 again.",
     }[err.code] || err.message;
     setStatus("Could not get your location. " + why + " (" + err.message + ") Or use the box above to go to a place.");
     console.warn("Geolocation error", err.code, err.message);
-  }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
+  };
+  const metres = (a, b) => metersBetween({ lat: a.coords.latitude, lng: a.coords.longitude }, { lat: b.coords.latitude, lng: b.coords.longitude });
+  // 1) Quick: a position up to 10 minutes old, if the device has one. Searches right away (no waiting for the map to settle).
+  navigator.geolocation.getCurrentPosition((pos) => {
+    first = pos;
+    show(pos, true);
+    setStatus("Near you (refining…). Press Search to find spots here.");
+    $("search").click();
+  }, () => { /* no recent position: the fresh one below handles it */ }, { enableHighAccuracy: false, timeout: 1500, maximumAge: 600000 });
+  // 2) Fresh: if it differs from the quick one by more than 500 m, move there and search again.
+  navigator.geolocation.getCurrentPosition((pos) => {
+    if (!first) { show(pos, true); setStatus("Zoomed to your location."); $("search").click(); return; }
+    show(pos, false);
+    if (metres(first, pos) > 500) { show(pos, true); $("search").click(); }
+    setStatus("Zoomed to your location.", true);
+  }, (err) => { if (!first) fail(err); }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 });
 }
 $("locate").onclick = locate;
 
