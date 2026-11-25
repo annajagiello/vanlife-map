@@ -1,6 +1,6 @@
 {
-  "name": "Campervan Spots",
-  "short_name": "Campervan Spots",
+  "name": "Vanlife Map",
+  "short_name": "Vanlife Map",
   "description": "Find camper and motorhome spots with weather",
   "start_url": "./index.html",
   "scope": "./",
