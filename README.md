@@ -1,6 +1,6 @@
 # Camper Spots
 
-A single-page web app for finding camper and motorhome spots: Google Places results (campsites, aires, parking, rest stops, toilets, laundromats, supermarkets, malls) on a map, with weather per spot and an optional temperature map. Installable on a phone (PWA).
+A single-page web app for finding van and camper spots: Google Places results (campsites, aires, parking, rest stops, toilets, laundromats, supermarkets, malls) on a map, with weather per spot and an optional temperature map. Installable on a phone (PWA).
 
 ## Use
 
