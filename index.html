@@ -122,9 +122,10 @@
     #more .row:first-of-type { margin-top: 0 !important; }
     #more .chk { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
     #more .p4n-row { display: none; }
-    #days { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 2px; }
-    #days button { flex: none; }
-    #more #days { flex: 1; min-width: 0; }
+    /* Weather options: label on its own line, buttons wrap (no sideways scrolling) */
+    #more #wxopts .row { flex-direction: column; align-items: flex-start; flex-wrap: wrap; gap: 4px; }
+    #more #days, #more #hl { flex-wrap: wrap; gap: 6px; }
+    #more #days button, #more #hl button { padding: 5px 10px; }
   }
 </style>
 </head>
