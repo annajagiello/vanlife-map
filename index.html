@@ -35,6 +35,7 @@
   .kind { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
   .kind.wc { color: #0c8599; border-color: #0c8599; }
   .kind.open { color: #2b8a3e; border-color: #2b8a3e; }
+  .meta.closed { color: #e03131; font-weight: 600; }
   #list li:hover, #list li.active { background: var(--bg); }
   .name { font-weight: 600; display: flex; gap: 8px; align-items: flex-start; }
   .name .tag { flex: none; margin-top: 1px; }
@@ -186,7 +187,6 @@
         <label title="Show laundromats on the map (a Places search per view)"><input type="checkbox" id="showLaundry"> Laundromats</label>
         <label title="Show shopping malls on the map (a Places search per view)"><input type="checkbox" id="showMalls"> Malls</label>
         <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
-        <label title="Only spots where Google says there is a toilet; spots with no toilet info are hidden"><input type="checkbox" id="onlyToilet"> Only with toilet</label>
         <label title="While the app is open: a campsite, aire or camper parking you stay within 150 m of for 10 minutes is marked as visited"><input type="checkbox" id="autoVisit" checked> Auto-mark visited</label>
       </div>
       <div class="sect">Weather</div>
@@ -223,7 +223,10 @@ const store = {
 };
 // Fields that are cheap: id, displayName, location, formattedAddress, googleMapsURI, types.
 // rating + userRatingCount bill at a higher SKU tier (see Google pricing); drop them to stay in the cheaper tier.
-const FIELDS = ["id", "displayName", "location", "formattedAddress", "googleMapsURI", "rating", "userRatingCount", "types", "primaryType", "primaryTypeDisplayName", "regularOpeningHours", "currentOpeningHours", "utcOffsetMinutes", "businessStatus", "websiteURI", "hasRestroom"];
+// Search fields stay in Google's "Pro" billing level (5,000 free requests a month instead of 1,000). Ratings, opening hours,
+// website and toilet info are Enterprise / Atmosphere fields, so they are loaded only when a pin's card is opened (DETAIL_FIELDS).
+const FIELDS = ["id", "displayName", "location", "formattedAddress", "googleMapsURI", "types", "primaryType", "primaryTypeDisplayName", "businessStatus"];
+const DETAIL_FIELDS = ["editorialSummary", "reviews", "rating", "userRatingCount", "regularOpeningHours", "currentOpeningHours", "utcOffsetMinutes", "websiteURI", "hasRestroom"];
 
 // Every search runs all three; spots are told apart by their label, not filtered by the user.
 const SEARCHES = [
@@ -378,7 +381,6 @@ $("showToilets").onchange = () => {
 };
 // Ticking a kind that wasn't searched yet needs a fresh search; unticking just hides it.
 $("showVan").onchange = $("showCamping").onchange = (e) => { render(); if (e.target.checked) $("search").click(); };
-$("onlyToilet").onchange = () => render();
 
 let meMarker;
 function locate() {
@@ -482,8 +484,8 @@ $("search").onclick = async () => {
       byId.set(p.id, p);
       via.set(p.id, [...(via.get(p.id) || []), queries[i].includedType]);
     }));
-    // true/false from Google's opening hours, or undefined when the place lists none.
-    const openNow = new Map([...byId.values()].map((p) => [p.id, isOpenNow(p)]));
+    // Opening hours are not part of the search any more (cost), so "open now" is shown in the card, not filtered here.
+    const openNow = new Map();
     // Public toilets (map only). Basic fields keep this request cheap.
     const wantToilets = $("showToilets").checked;
     const googleToiletsP = !wantToilets ? Promise.resolve(null) : Place.searchByText({ textQuery: "public toilet", includedType: "public_bathroom", fields: ["id", "displayName", "location", "googleMapsURI"], locationRestriction: bounds, maxResultCount: 20 })
@@ -498,7 +500,7 @@ $("search").onclick = async () => {
       .map((p) => ({
         kind: kindOf(p, via.get(p.id)).kind, inferred: kindOf(p, via.get(p.id)).inferred, typeName: p.primaryTypeDisplayName || "", primaryType: p.primaryType || "",
         open: openNow.get(p.id), id: "g:" + p.id, placeId: p.id, source: "google", name: p.displayName, lat: p.location.lat(), lng: p.location.lng(),
-        address: p.formattedAddress, url: p.googleMapsURI, website: safeUrl(p.websiteURI), toilet: p.hasRestroom, rating: p.rating, count: p.userRatingCount,
+        address: p.formattedAddress, url: p.googleMapsURI,
       }));
     // Keep spots found earlier outside this view, so panning adds spots instead of replacing them; inside the view the new results win.
     const kept = spots.filter((s) => s.source === "google" && !bounds.contains({ lat: s.lat, lng: s.lng }));
@@ -610,10 +612,10 @@ const POIS = {
 // Google tags some businesses as shopping malls (a flooring company, a person's shop). Names that look like a company or a goods shop are
 // dropped from the mall results, and any place can be hidden for good from its popup ("Not a mall?").
 const NOT_MALL = /(^|[\s,-])(s\.?r\.?l\.?s?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?p\.?a\.?|gmbh|ltd)($|[\s,.-])|pavimenti|rivestimenti|arredament|mobili|cucine|ceramic|sneaker|boutique|ferramenta|edil|bricolage|bazaa?r|basar/i;
-// Supermarkets: Google also returns corner shops and greengrocers under this type. Kept: open now, Google category supermarket or
+// Supermarkets: Google also returns corner shops and greengrocers under this type. Kept: Google category supermarket or
 // hypermarket, and no greengrocer or small-format (city, mini) names.
 const NOT_BIG_SUPERMARKET = /fruter[ií]a|frutter[ií]a|fruttivendol|ortofrutta|verduler|greengrocer|\bcity\b|\bmini\b/i;
-const bigSupermarket = (p) => ["supermarket", "hypermarket"].includes(p.primaryType) && isOpenNow(p) === true
+const bigSupermarket = (p) => ["supermarket", "hypermarket"].includes(p.primaryType)
   && (!p.businessStatus || p.businessStatus === "OPERATIONAL") && !NOT_BIG_SUPERMARKET.test(p.displayName || "");
 const hiddenPois = new Set((() => { try { return JSON.parse(store.get("hidden_pois") || "[]"); } catch { return []; } })());
 const saveHiddenPois = () => store.set("hidden_pois", JSON.stringify([...hiddenPois]));
@@ -635,11 +637,11 @@ async function loadPoi(kind, bounds) {
   poiMarkers[kind] = [];
   if (!$(cfg.box).checked || !bounds) return;
   try {
-    const places = await searchTiled({ textQuery: cfg.query, includedType: cfg.type, fields: ["id", "displayName", "location", "googleMapsURI", "rating", "userRatingCount", "websiteURI"].concat(kind === "supermarket" ? ["primaryType", "regularOpeningHours", "currentOpeningHours", "utcOffsetMinutes", "businessStatus"] : []) }, bounds, 0);
+    const places = await searchTiled({ textQuery: cfg.query, includedType: cfg.type, fields: ["id", "displayName", "location", "googleMapsURI"].concat(kind === "supermarket" ? ["primaryType", "businessStatus"] : []) }, bounds, 0);
     if (seq !== poiSeq[kind] || !$(cfg.box).checked) return; // a newer search or unticking got there first
     for (const p of places) {
       if (hiddenPois.has("p:" + p.id) || (kind === "mall" && NOT_MALL.test(p.displayName || "")) || (kind === "supermarket" && !bigSupermarket(p))) continue;
-      const t = { id: "p:" + p.id, placeId: p.id, source: "poi", origin: "google", kind, name: p.displayName || KINDS[kind].label, url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng(), rating: p.rating, count: p.userRatingCount, website: safeUrl(p.websiteURI) };
+      const t = { id: "p:" + p.id, placeId: p.id, source: "poi", origin: "google", kind, name: p.displayName || KINDS[kind].label, url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng() };
       const content = pin("google", t.name, kind, t.id);
       content.classList.add("small", "poi", "poi-" + kind);
       const m = new AdvancedMarkerElement({ map, position: { lat: t.lat, lng: t.lng }, title: t.name, content, zIndex: 1 });
@@ -1137,9 +1139,8 @@ function render() {
   const order = Object.keys(KINDS); // camping, rv, camper parking, parking, other
   spots.sort((a, b) => (order.indexOf(a.kind) - order.indexOf(b.kind)) || ((b.rating ?? 0) - (a.rating ?? 0)));
   const showCamping = $("showCamping").checked, showVan = $("showVan").checked;
-  const onlyToilet = $("onlyToilet").checked;
   const VAN = ["rv", "camperpark", "parking", "reststop"];
-  const shown = spots.filter((s) => !(s.kind === "camping" ? !showCamping : VAN.includes(s.kind) && !showVan) && !(onlyToilet && s.toilet !== true));
+  const shown = spots.filter((s) => !(s.kind === "camping" ? !showCamping : VAN.includes(s.kind) && !showVan)); // toilet info is loaded per card now, so there is no "only with toilet" filter
   if (!shown.some((s) => !$("detail").hidden && $("detail").querySelector("h2")?.textContent === s.name)) $("detail").hidden = true;
   for (const s of shown) {
     const m = new AdvancedMarkerElement({ map, position: { lat: s.lat, lng: s.lng }, title: s.name, content: pin(s.source, s.name, s.kind, s.id) });
@@ -1162,10 +1163,9 @@ function render() {
       kind.style.color = "#fff";
       badges.append(kind);
     }
-    if (s.source === "google") badges.append(el("span", s.open ? "Open now" : "Hours unknown", "kind " + (s.open ? "open" : "")));
     if (s.toilet === true) badges.append(el("span", "🚻 Toilet", "kind wc"));
     else if (s.toilet === false) badges.append(el("span", "No toilet", "kind"));
-    const meta = el("div", s.rating ? "★ " + s.rating + (s.count ? " (" + s.count + ")" : "") : "No rating", "meta");
+    const meta = el("div", s.rating ? "★ " + s.rating + (s.count ? " (" + s.count + ")" : "") : "", "meta");
     const wxe = el("span", null, "wx"); wxe.dataset.sid = s.id;
     meta.prepend(wxe);
     li.append(name, badges, meta);
@@ -1204,7 +1204,7 @@ function select(id, pan) {
   if (s) showDetail(s);
 }
 
-const detailCache = new Map(); // placeId -> {summary, reviews}
+const detailCache = new Map(); // placeId -> {summary, reviews, rating, count, open, website, toilet}
 
 function el(tag, text, cls) {
   const e = document.createElement(tag);
@@ -1323,7 +1323,8 @@ async function showDetail(s) {
   if (origin === "osm") badge.title = "OpenStreetMap";
   const top = el("div", null, "top");
   top.append(badge, head);
-  const meta = el("div", [(KINDS[s.kind] ? KINDS[s.kind].glyph + " " + KINDS[s.kind].label : ""), s.rating ? "★ " + s.rating : (s.source === "toilet" ? "" : "No rating"), s.count ? s.count + " reviews" : ""].filter(Boolean).join(" · "), "meta");
+  const metaText = (rating, count, loaded) => [(KINDS[s.kind] ? KINDS[s.kind].glyph + " " + KINDS[s.kind].label : ""), rating ? "★ " + rating : (loaded ? "No rating" : ""), count ? count + " reviews" : ""].filter(Boolean).join(" · ");
+  const meta = el("div", metaText(s.rating, s.count, false), "meta");
   const vbtn = el("button", "✓", "visbtn");
   const paintVis = () => { const on = visited.has(s.id); vbtn.classList.toggle("on", on); vbtn.title = vbtn.ariaLabel = on ? "Visited on " + new Date(visited.get(s.id).at).toLocaleDateString() + " (tap to unmark)" : "Mark as visited"; };
   vbtn.onclick = () => { setVisited(s, !visited.has(s.id)); paintVis(); };
@@ -1336,9 +1337,10 @@ async function showDetail(s) {
   fillWxBox(s);
   loadWeather([s]);
   (s.facts || []).forEach((f) => box.append(el("div", f, "meta")));
-  if (s.source === "google") box.append(el("div", s.open ? "Open now" : "Opening hours not listed by Google", "meta"));
+  const info = el("div"); // opening hours, toilet and website: filled in once the place's details arrive
+  box.append(info);
   if (s.typeName) box.append(el("div", "Google category: " + s.typeName + (s.inferred ? " (counted as camping because of its lodging tag or name)" : ""), "meta"));
-  if (s.website) { const w = el("a", "Website: " + siteName(s.website) + " ↗"); w.href = s.website; w.target = "_blank"; w.rel = "noopener noreferrer"; const wp = el("p"); wp.append(w); box.append(wp); }
+  if (s.website) { const w = el("a", "Website: " + siteName(s.website) + " ↗", "site"); w.href = s.website; w.target = "_blank"; w.rel = "noopener noreferrer"; const wp = el("p"); wp.append(w); box.append(wp); }
   if (s.url) { const a = el("a", "Open in " + (s.source === "p4n" ? "Park4night" : s.origin === "osm" ? "OpenStreetMap" : "Google Maps")); a.href = s.url; a.target = "_blank"; a.rel = "noopener"; const p = el("p"); p.append(a); box.append(p); }
   if (s.source === "poi") {
     const row = el("p");
@@ -1355,20 +1357,23 @@ async function showDetail(s) {
     box.append(row);
   }
   if (s.source !== "google" && s.source !== "poi") return; // toilets have no description or reviews
-  if (s.toilet === true) box.append(el("div", "🚻 Toilet available (per Google)", "meta"));
-  else if (s.toilet === false) box.append(el("div", "No toilet (per Google)", "meta"));
-
-  const note = el("p", "Loading description and reviews…", "meta");
+  const note = el("p", "Loading details and reviews…", "meta");
   box.append(note);
   try {
     let d = detailCache.get(s.placeId);
     if (!d) {
       const place = new Place({ id: s.placeId });
-      await place.fetchFields({ fields: ["editorialSummary", "reviews"] });
-      d = { summary: place.editorialSummary || "", reviews: place.reviews || [] };
+      await place.fetchFields({ fields: DETAIL_FIELDS });
+      d = { summary: place.editorialSummary || "", reviews: place.reviews || [], rating: place.rating, count: place.userRatingCount, open: isOpenNow(place), website: safeUrl(place.websiteURI), toilet: place.hasRestroom };
       detailCache.set(s.placeId, d);
     }
     if (seq !== detailSeq) return; // a newer tap took over
+    Object.assign(s, { rating: d.rating, count: d.count, open: d.open, toilet: d.toilet, website: s.website || d.website });
+    meta.textContent = metaText(d.rating, d.count, true);
+    info.append(el("div", d.open === true ? "Open now" : d.open === false ? "Closed now" : "Opening hours not listed by Google", "meta" + (d.open === false ? " closed" : "")));
+    if (d.toilet === true) info.append(el("div", "🚻 Toilet available (per Google)", "meta"));
+    else if (d.toilet === false) info.append(el("div", "No toilet (per Google)", "meta"));
+    if (d.website && !box.querySelector("a.site")) { const w = el("a", "Website: " + siteName(d.website) + " ↗", "site"); w.href = d.website; w.target = "_blank"; w.rel = "noopener noreferrer"; const wp = el("p"); wp.append(w); info.append(wp); }
     note.remove();
     box.append(el("p", d.summary || "No description from Google for this place."));
     // Google returns at most 5 reviews (most relevant); show the 2 newest of those.
