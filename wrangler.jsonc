@@ -1,6 +1,7 @@
 {
-  // Cloudflare: serve this folder as a static site (no Worker script).
+  // Cloudflare: the app's files are served as static assets; worker.js adds /api/weather (MET Norway proxy).
   "name": "vanlife-map",
+  "main": "worker.js",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./" }
+  "assets": { "directory": "./", "binding": "ASSETS" }
 }
