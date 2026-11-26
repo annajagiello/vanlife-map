@@ -590,10 +590,13 @@ function osmFacts(t) {
   return f;
 }
 
+const toiletLists = { google: [], osm: [] }; // last drawn, so hiding / unhiding a toilet can redraw without a new search
 function drawToilets(list, origin) {
+  toiletLists[origin] = list;
   toiletMarkers[origin].forEach((m) => (m.map = null));
   toiletMarkers[origin].length = 0;
   for (const t of list) {
+    if (hiddenPois.has(t.id)) continue;
     const content = pin("google", t.name, "toilet", t.id);
     content.classList.add("small");
     const m = new AdvancedMarkerElement({ map, position: { lat: t.lat, lng: t.lng }, title: t.name, content, zIndex: 1 });
@@ -1140,7 +1143,7 @@ function render() {
   spots.sort((a, b) => (order.indexOf(a.kind) - order.indexOf(b.kind)) || ((b.rating ?? 0) - (a.rating ?? 0)));
   const showCamping = $("showCamping").checked, showVan = $("showVan").checked;
   const VAN = ["rv", "camperpark", "parking", "reststop"];
-  const shown = spots.filter((s) => !(s.kind === "camping" ? !showCamping : VAN.includes(s.kind) && !showVan)); // toilet info is loaded per card now, so there is no "only with toilet" filter
+  const shown = spots.filter((s) => !(s.kind === "camping" ? !showCamping : VAN.includes(s.kind) && !showVan) && !hiddenPois.has(s.id)); // toilet info is loaded per card now, so there is no "only with toilet" filter
   if (!shown.some((s) => !$("detail").hidden && $("detail").querySelector("h2")?.textContent === s.name)) $("detail").hidden = true;
   for (const s of shown) {
     const m = new AdvancedMarkerElement({ map, position: { lat: s.lat, lng: s.lng }, title: s.name, content: pin(s.source, s.name, s.kind, s.id) });
@@ -1287,7 +1290,7 @@ function markFavs() {
   const present = new Set([...document.querySelectorAll(".pin[data-id]:not(.fav-own)")].map((e) => e.dataset.id));
   for (const id of new Set([...favs.keys(), ...visited.keys()])) { // favourites and visited places stay on the map outside the results
     const f = favs.get(id) || visited.get(id);
-    if (present.has(id) || !favTypeOn(f.kind)) continue;
+    if (present.has(id) || !favTypeOn(f.kind) || hiddenPois.has(id)) continue;
     const content = pin(f.source === "p4n" ? "p4n" : "google", f.name, f.kind, id);
     content.classList.add("fav-own");
     content.classList.toggle("is-fav", favs.has(id));
@@ -1335,15 +1338,23 @@ async function showDetail(s) {
   if (s.typeName) box.append(el("div", "Google category: " + s.typeName + (s.inferred ? " (counted as camping because of its lodging tag or name)" : ""), "meta"));
   if (s.website) { const w = el("a", "Website: " + siteName(s.website) + " ↗", "site"); w.href = s.website; w.target = "_blank"; w.rel = "noopener noreferrer"; const wp = el("p"); wp.append(w); box.append(wp); }
   if (s.url) { const a = el("a", "Open in " + (s.source === "p4n" ? "Park4night" : s.origin === "osm" ? "OpenStreetMap" : "Google Maps")); a.href = s.url; a.target = "_blank"; a.rel = "noopener"; const p = el("p"); p.append(a); box.append(p); }
-  if (s.source === "poi") {
+  { // every kind of place can be hidden for good (kept in this browser, like favourites)
     const row = el("p");
-    const btn = el("button", "Not a " + KINDS[s.kind].label.toLowerCase() + "? Hide this place");
+    const btn = el("button", "Hide this place");
+    const apply = () => { // take the pin off or put it back, without a new search where possible
+      if (s.source === "poi") { if (hiddenPois.has(s.id)) poiMarkers[s.kind].filter((m) => m.poiId === s.id).forEach((m) => (m.map = null)); else loadPoi(s.kind, map.getBounds()); }
+      else if (s.source === "toilet") drawToilets(toiletLists[s.origin] || [], s.origin);
+      else if (hiddenPois.has(s.id)) { // remove just this pin and list row: a full redraw would close this card and its Undo
+        const m = markers.get(s.id); if (m) { m.map = null; markers.delete(s.id); }
+        document.querySelector('#list li[data-id="' + CSS.escape(s.id) + '"]')?.remove();
+      } else render();
+      markFavs();
+    };
     btn.onclick = () => {
-      hiddenPois.add(s.id); saveHiddenPois();
-      poiMarkers[s.kind].filter((m) => m.poiId === s.id).forEach((m) => (m.map = null));
+      hiddenPois.add(s.id); saveHiddenPois(); apply();
       row.replaceChildren(el("span", "Hidden. ", "meta"));
       const undo = el("button", "Undo");
-      undo.onclick = () => { hiddenPois.delete(s.id); saveHiddenPois(); loadPoi(s.kind, map.getBounds()); row.replaceChildren(el("span", "Restored.", "meta")); };
+      undo.onclick = () => { hiddenPois.delete(s.id); saveHiddenPois(); apply(); row.replaceChildren(el("span", "Restored.", "meta")); };
       row.append(undo);
     };
     row.append(btn);
