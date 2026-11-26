@@ -187,7 +187,7 @@
         <label title="Show laundromats on the map (a Places search per view)"><input type="checkbox" id="showLaundry"> Laundromats</label>
         <label title="Show shopping malls on the map (a Places search per view)"><input type="checkbox" id="showMalls"> Malls</label>
         <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
-        <label title="While the app is open: a campsite, aire or camper parking you stay within 150 m of for 10 minutes is marked as visited"><input type="checkbox" id="autoVisit" checked> Auto-mark visited</label>
+        <label title="Opening the app within 100 m of a campsite, aire, parking or rest stop marks it as visited at once; with the app already open, after 3 minutes within 150 m"><input type="checkbox" id="autoVisit" checked> Auto-mark visited</label>
       </div>
       <div class="sect">Weather</div>
       <div class="row">
@@ -1230,11 +1230,12 @@ function toggleFav(s) {
   markFavs();
   return favs.has(s.id);
 }
-// Auto-mark a campsite, aire or camper parking as visited (regular parking and rest stops are left to the ✓ button):
+// Auto-mark a campsite, aire, camper parking, parking or rest stop as visited:
 // - on opening the app (or coming back to it) within 100 m of one: straight away, as "I've arrived";
-// - while the app is open: after staying within 150 m of one for 3 minutes, so driving past doesn't count.
+// - otherwise, while the app is open: after staying within 150 m of one for 3 minutes, so driving past doesn't count.
+// Only one of the two is needed: a place already marked is never marked again.
 // A web app gets no location in the background, so nothing happens while it is closed.
-const VISIT_R = 150, VISIT_MS = 3 * 60 * 1000, ARRIVE_R = 100, ARRIVE_WINDOW = 90 * 1000, VISIT_KINDS = ["camping", "rv", "camperpark"];
+const VISIT_R = 150, VISIT_MS = 3 * 60 * 1000, ARRIVE_R = 100, ARRIVE_WINDOW = 90 * 1000, VISIT_KINDS = ["camping", "rv", "camperpark", "parking", "reststop"];
 let lastFix = null, dwell = null, openedAt = Date.now();
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") openedAt = Date.now(); });
 const markVisitAuto = (s) => { setVisited(s, true); toast("Marked " + s.name + " as visited", () => setVisited(s, false)); };
