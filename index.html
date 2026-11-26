@@ -506,6 +506,7 @@ $("search").onclick = async () => {
     const oldNear = kept.sort((a, b) => metersBetween(a, c0.toJSON()) - metersBetween(b, c0.toJSON())).slice(0, 400);
     spots = spots.filter((s) => s.source !== "google").concat(oldNear, google);
     render();
+    checkDwell(); // new results near you may mean you have arrived somewhere
     setStatus(google.length + " Google spots" + (hidden ? ", " + hidden + " other businesses hidden" : "") + (closed ? ", " + closed + " closed now hidden" : "") + (garages ? ", " + garages + " garages hidden" : "") + (capped ? " (very dense area: some spots may be missing, zoom in for more)" : "") + ".", true);
     if (wantToilets) loadToilets(googleToiletsP, osmToiletsP, bounds, token); // not awaited: toilets fill in as they arrive
     loadPois(bounds);
@@ -1229,21 +1230,25 @@ function toggleFav(s) {
   markFavs();
   return favs.has(s.id);
 }
-// Auto-mark: while the app is open (a web app gets no location in the background), a campsite, aire or camper parking the
-// phone stays within 150 m of for 10 minutes is marked as visited. Regular parking and rest stops are left to the ✓ button,
-// so a stop at a car park doesn't count.
-const VISIT_R = 150, VISIT_MS = 10 * 60 * 1000, VISIT_KINDS = ["camping", "rv", "camperpark"];
-let lastFix = null, dwell = null;
+// Auto-mark a campsite, aire or camper parking as visited (regular parking and rest stops are left to the ✓ button):
+// - on opening the app (or coming back to it) within 100 m of one: straight away, as "I've arrived";
+// - while the app is open: after staying within 150 m of one for 3 minutes, so driving past doesn't count.
+// A web app gets no location in the background, so nothing happens while it is closed.
+const VISIT_R = 150, VISIT_MS = 3 * 60 * 1000, ARRIVE_R = 100, ARRIVE_WINDOW = 90 * 1000, VISIT_KINDS = ["camping", "rv", "camperpark"];
+let lastFix = null, dwell = null, openedAt = Date.now();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") openedAt = Date.now(); });
+const markVisitAuto = (s) => { setVisited(s, true); toast("Marked " + s.name + " as visited", () => setVisited(s, false)); };
 function checkDwell() {
   if (!lastFix || !$("autoVisit").checked) return;
   let best = null, bd = Infinity;
   for (const s of spots) if (VISIT_KINDS.includes(s.kind)) { const d = metersBetween(s, lastFix); if (d < bd) { bd = d; best = s; } }
+  // Just opened: the first positions and the first search results count as arriving.
+  if (best && bd <= ARRIVE_R && Date.now() - openedAt < ARRIVE_WINDOW && !visited.has(best.id)) { openedAt = 0; markVisitAuto(best); return; }
   if (!best || bd > VISIT_R) { dwell = null; return; }
   if (!dwell || dwell.id !== best.id) { dwell = { id: best.id, since: lastFix.t }; return; }
   if (Date.now() - dwell.since >= VISIT_MS && !visited.has(best.id) && !dwell.done) {
     dwell.done = true;
-    setVisited(best, true);
-    toast("Marked " + best.name + " as visited", () => setVisited(best, false));
+    markVisitAuto(best);
   }
 }
 function watchVisits() {
