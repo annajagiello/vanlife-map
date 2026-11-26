@@ -187,6 +187,7 @@
         <label title="Show laundromats on the map (a Places search per view)"><input type="checkbox" id="showLaundry"> Laundromats</label>
         <label title="Show shopping malls on the map (a Places search per view)"><input type="checkbox" id="showMalls"> Malls</label>
         <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
+        <div id="osmStats" class="meta" style="grid-column: 1 / -1"></div>
         <label title="Opening the app within 100 m of a campsite, aire, parking or rest stop marks it as visited"><input type="checkbox" id="autoVisit" checked> Auto-mark visited</label>
       </div>
       <div class="sect">Weather</div>
@@ -562,21 +563,40 @@ const OVERPASS = [
   { url: "https://overpass-api.de/api/interpreter", ms: 10000 },
   { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", ms: 30000 },
 ];
+// Reliability log for the OSM servers (this browser only, last 300 attempts), summarised in Settings, to decide whether to keep OSM.
+const OSM_LOG_KEY = "osm_log";
+const osmLog = () => { try { return JSON.parse(store.get(OSM_LOG_KEY) || "[]"); } catch { return []; } };
+function logOsm(entry) { store.set(OSM_LOG_KEY, JSON.stringify(osmLog().concat({ t: Date.now(), ...entry }).slice(-300))); paintOsmStats(); }
+function paintOsmStats() {
+  const box = $("osmStats");
+  if (!box) return;
+  const loads = osmLog().filter((e) => e.load && Date.now() - e.t < 30 * 864e5);
+  if (!loads.length) { box.textContent = "OSM toilets: no loads tracked yet."; return; }
+  const ok = loads.filter((e) => e.ok), ms = ok.map((e) => e.ms).sort((a, b) => a - b);
+  box.textContent = "OSM toilets, last 30 days: " + ok.length + " of " + loads.length + " loads worked" + (ms.length ? ", typical wait " + (ms[Math.floor(ms.length / 2)] / 1000).toFixed(1) + " s" : "") + ".";
+}
 async function fetchOsmToilets(bounds) {
   const b = bounds.toJSON();
   if (b.east - b.west > 1.5 || b.north - b.south > 1.5) return { tooWide: true };
   const q = `[out:json][timeout:25];nwr["amenity"="toilets"](${b.south},${b.west},${b.north},${b.east});out center tags;`;
+  const t0 = performance.now();
   for (const server of OVERPASS) {
+    const host = new URL(server.url).hostname, s0 = performance.now();
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), server.ms);
     try {
       const r = await fetch(server.url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
-      if (!r.ok) continue;
-      return { elements: (await r.json()).elements };
+      if (!r.ok) { logOsm({ host, result: "HTTP " + r.status, ms: Math.round(performance.now() - s0) }); continue; }
+      const elements = (await r.json()).elements;
+      logOsm({ host, result: "ok", ms: Math.round(performance.now() - s0), n: elements.length });
+      logOsm({ load: true, ok: true, ms: Math.round(performance.now() - t0) });
+      return { elements };
     } catch (e) {
-      console.warn("OSM toilets failed on " + new URL(server.url).hostname + ":", e.message);
+      logOsm({ host, result: e.name === "AbortError" ? "timeout" : "error", ms: Math.round(performance.now() - s0) });
+      console.warn("OSM toilets failed on " + host + ":", e.message);
     } finally { clearTimeout(timer); }
   }
+  logOsm({ load: true, ok: false, ms: Math.round(performance.now() - t0) });
   return null;
 }
 
@@ -1398,6 +1418,7 @@ async function showDetail(s) {
 }
 
 document.querySelectorAll("#wxopts button").forEach((b) => (b.disabled = true)); // until Heat map is ticked
+paintOsmStats();
 init();
 // Installable app: the service worker needs https (or localhost).
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
