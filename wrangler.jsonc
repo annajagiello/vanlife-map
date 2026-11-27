@@ -1,7 +1,11 @@
 {
-  // Cloudflare: the app's files are served as static assets; worker.js adds /api/weather (MET Norway proxy).
+  // Cloudflare: the app's files are served as static assets; worker.js adds the API:
+  // /api/weather (MET Norway proxy) and the account endpoints in account.js, stored in the D1 database below.
   "name": "vanlife-map",
   "main": "worker.js",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./", "binding": "ASSETS" }
+  "assets": { "directory": "./", "binding": "ASSETS" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "vanlife-map", "database_id": "803688a4-86f2-44a3-9ea6-b5254be5d4cc" }
+  ]
 }
