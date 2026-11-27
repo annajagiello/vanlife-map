@@ -103,6 +103,7 @@
   #onboard .card { width: min(380px, 100%); display: grid; gap: 14px; justify-items: center; text-align: center; }
   #onboard img { width: 88px; height: 88px; border-radius: 20px; }
   #onboard h2 { margin: 0; font-size: 22px; }
+  #onboard .appname { margin: -4px 0 -6px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
   #onboard p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
   #onboard .primary { padding: 10px 22px; font-size: 15px; }
   #onboard .skip { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 6px; }
@@ -1656,7 +1657,7 @@ function paintOnboarding() {
     const img = document.createElement("img"); img.src = "icon.svg"; img.alt = "";
     const go = el("button", "Show me what's nearby", "primary");
     go.onclick = () => { onboardStep = session ? 3 : 2; paintOnboarding(); };
-    card.append(img, el("h2", "Errands on the road, sorted."), el("p", "Parking, toilets, supermarkets and laundromats, with reviews, opening hours and the weather ahead."), go);
+    card.append(img, el("div", "Vanlife Map", "appname"), el("h2", "Errands on the road, sorted."), el("p", "Parking, toilets, supermarkets and laundromats, with reviews, opening hours and the weather ahead."), go);
   } else if (onboardStep === 2) {
     const btn = el("div");
     const skip = el("button", "Continue without account", "skip");
