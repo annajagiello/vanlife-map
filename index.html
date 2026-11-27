@@ -199,6 +199,7 @@
         <label title="Show shopping malls on the map (a Places search per view)"><input type="checkbox" id="showMalls"> Malls</label>
         <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
         <div id="osmStats" class="meta" style="grid-column: 1 / -1"></div>
+        <div id="searchStats" class="meta" style="grid-column: 1 / -1"></div>
         <label title="Opening the app within 100 m of a place on the map marks the nearest one as visited"><input type="checkbox" id="autoVisit" checked> Auto-mark visited</label>
       </div>
       <div class="sect">Weather</div>
@@ -375,6 +376,8 @@ async function init() {
     ]);
     ({ AdvancedMarkerElement } = markerLib);
     ({ Place } = placesLib);
+    const rawSearch = Place.searchByText.bind(Place);
+    Place.searchByText = (o) => { bumpStat("requests"); return rawSearch(o); }; // count Google search requests for the stats in Settings
     // Open where you left off (browser storage only); falls back to a Europe view.
     let view = { center: { lat: 46, lng: 8 }, zoom: 5 };
     try { const v = JSON.parse(store.get("last_view")); if (Number.isFinite(v?.center?.lat) && Number.isFinite(v?.center?.lng) && Number.isFinite(v?.zoom)) view = v; } catch {}
@@ -495,7 +498,10 @@ function autoSearch() {
     const c = b.getCenter(), lb = lastSearch?.bounds, lc = lb?.getCenter();
     const span = lb && lb.toSpan();
     const moved = lb && (Math.abs(c.lat() - lc.lat()) > span.lat() / 4 || Math.abs(c.lng() - lc.lng()) > span.lng() / 4);
-    if ((!lastSearch || moved || z >= lastSearch.zoom + 1) && !coveredNow(b, z)) $("search").click();
+    if (!lastSearch || moved || z >= lastSearch.zoom + 1) {
+      if (coveredNow(b, z)) bumpStat("saved"); // would have searched, but this area is already known
+      else $("search").click();
+    }
   }, 1200);
 }
 
@@ -504,6 +510,7 @@ $("search").onclick = async () => {
   const bounds = map.getBounds();
   if (!bounds) return;
   lastSearch = { bounds, zoom: map.getZoom() };
+  bumpStat("searches");
   $("search").disabled = true;
   const token = ++searchSeq;
   setStatus("Searching…");
@@ -1505,6 +1512,31 @@ async function showDetail(s) {
 
 document.querySelectorAll("#wxopts button").forEach((b) => (b.disabled = true)); // until Heat map is ticked
 paintOsmStats();
+// Search stats for the last 7 days (this device): searches made, Google requests they used, and searches skipped
+// because the area was already searched (see coveredNow). Shown in Settings, to judge how much the memory saves.
+const STATS_KEY = "search_stats";
+function bumpStat(field) {
+  let st;
+  try { st = JSON.parse(store.get(STATS_KEY) || "{}"); } catch { st = {}; }
+  const d = localDay(new Date());
+  st[d] = st[d] || { searches: 0, requests: 0, saved: 0 };
+  st[d][field]++;
+  const days = Object.keys(st).sort();
+  while (days.length > 14) delete st[days.shift()];
+  store.set(STATS_KEY, JSON.stringify(st));
+  paintSearchStats();
+}
+function paintSearchStats() {
+  let st;
+  try { st = JSON.parse(store.get(STATS_KEY) || "{}"); } catch { st = {}; }
+  const since = localDay(new Date(Date.now() - 6 * 864e5));
+  const sum = { searches: 0, requests: 0, saved: 0 };
+  for (const [d, v] of Object.entries(st)) if (d >= since) for (const k in sum) sum[k] += v[k] || 0;
+  const perSearch = sum.searches ? sum.requests / sum.searches : 0;
+  $("searchStats").textContent = "Searches, last 7 days: " + sum.searches + " made (" + sum.requests + " Google requests) · " + sum.saved + " skipped, area already known"
+    + (sum.saved && perSearch ? " (≈" + Math.round(sum.saved * perSearch) + " requests saved)" : "") + ".";
+}
+paintSearchStats();
 // Settings survive closing the app: the spot types, heat map and what it shows, and whether the control bar is hidden.
 // The weather day is not kept: the app opens on today.
 function restoreSettings() {
