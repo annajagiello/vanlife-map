@@ -202,6 +202,8 @@
           <span class="meta">Map shows</span><div id="hl"><button data-m="max">Daily high</button><button data-m="min" class="on">Daily low</button><button data-m="rain">Rain</button></div>
         </div>
       </div>
+      <div class="sect">Account</div>
+      <div id="acct" style="display:grid; gap:6px; margin-top:4px"></div>
       <div class="row p4n-row" style="margin-top:10px">
         <label>Park4night file <input type="file" id="p4nFile" accept=".json,application/json"></label>
       </div>
@@ -223,11 +225,20 @@ function saveSettings() {
   const st = { mode: heatMode, panelHidden: document.body.classList.contains("nopanel") };
   SETTING_BOXES.forEach((id) => (st[id] = $(id).checked));
   store.set(SETTINGS_KEY, JSON.stringify(st));
+  markChanged();
 }
 const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
 };
+// Account state (see "Account" near the end). Every save of favourites, visited, hidden places or settings calls
+// markChanged(), which, when signed in, sends the whole set to the server a moment later.
+let session = store.get("session") || "", acctName = store.get("acct_name") || "", pushTimer = null, applyingDoc = false;
+function markChanged() {
+  if (applyingDoc) return;
+  store.set("local_updated", String(Date.now()));
+  if (session) { clearTimeout(pushTimer); pushTimer = setTimeout(pushDoc, 2000); }
+}
 // Fields that are cheap: id, displayName, location, formattedAddress, googleMapsURI, types.
 // rating + userRatingCount bill at a higher SKU tier (see Google pricing); drop them to stay in the cheaper tier.
 // Search fields stay in Google's "Pro" billing level (5,000 free requests a month instead of 1,000). Ratings, opening hours,
@@ -647,7 +658,7 @@ const NOT_BIG_SUPERMARKET = /fruter[ií]a|frutter[ií]a|fruttivendol|ortofrutta|
 const bigSupermarket = (p) => ["supermarket", "hypermarket"].includes(p.primaryType)
   && (!p.businessStatus || p.businessStatus === "OPERATIONAL") && !NOT_BIG_SUPERMARKET.test(p.displayName || "");
 const hiddenPois = new Set((() => { try { return JSON.parse(store.get("hidden_pois") || "[]"); } catch { return []; } })());
-const saveHiddenPois = () => store.set("hidden_pois", JSON.stringify([...hiddenPois]));
+const saveHiddenPois = () => { store.set("hidden_pois", JSON.stringify([...hiddenPois])); markChanged(); };
 const poiMarkers = { laundry: [], mall: [], supermarket: [] }, poiSeq = { laundry: 0, mall: 0, supermarket: 0 };
 // A query returns at most 20 places and ranks by relevance, so in a big city it fills up there and leaves the rest of the view empty.
 // When it comes back full, search the four quarters of the view as well (one level: at most 5 requests per type).
@@ -1281,7 +1292,7 @@ let detailSeq = 0; // a second tap on the same pin must not append the reviews t
 // so a favourite stays on the map even when it is outside the current search results.
 const FAV_KEYS = ["id", "source", "origin", "kind", "name", "lat", "lng", "url", "website", "rating", "count", "placeId", "toilet", "typeName", "inferred", "facts"];
 const favs = new Map((() => { try { return Object.entries(JSON.parse(store.get("favourites") || "{}")); } catch { return []; } })());
-const saveFavs = () => store.set("favourites", JSON.stringify(Object.fromEntries(favs)));
+const saveFavs = () => { store.set("favourites", JSON.stringify(Object.fromEntries(favs))); markChanged(); };
 let favMarkers = [];
 document.querySelectorAll("#more .chk input").forEach((i) => i.addEventListener("change", () => markFavs())); // follow the type boxes
 function toggleFav(s) {
@@ -1329,7 +1340,7 @@ $("autoVisit").addEventListener("change", () => store.set("auto_visit", $("autoV
 // Visited ("been here"): kept in this browser like favourites, with the date. Marked from a spot's card (✓ button), or
 // automatically, see watchVisits().
 const visited = new Map((() => { try { return Object.entries(JSON.parse(store.get("visited") || "{}")); } catch { return []; } })());
-const saveVisited = () => store.set("visited", JSON.stringify(Object.fromEntries(visited)));
+const saveVisited = () => { store.set("visited", JSON.stringify(Object.fromEntries(visited))); markChanged(); };
 function setVisited(s, on) {
   if (on) visited.set(s.id, { ...Object.fromEntries(FAV_KEYS.filter((k) => s[k] !== undefined).map((k) => [k, s[k]])), at: visited.get(s.id)?.at || Date.now() });
   else visited.delete(s.id);
@@ -1469,6 +1480,100 @@ function restoreSettings() {
 }
 restoreSettings();
 SETTING_BOXES.forEach((id) => $(id).addEventListener("change", saveSettings));
+
+// Account (optional): "Sign in with Google" keeps favourites, visited and hidden places and settings in the user's own
+// record on the server (account.js), so they follow the user to other devices. Without it everything stays on this device.
+// Rule for two devices: whichever copy was changed last wins; the very first sign-in merges this device into the account.
+const API_BASE = location.hostname === "localhost" ? "https://vanlife-map.annajagiello.workers.dev" : "";
+const GOOGLE_CLIENT_ID = "988770051891-dr9ava1do6jdn13j4tfeodltpj46dst0.apps.googleusercontent.com";
+const localDoc = () => ({ favs: Object.fromEntries(favs), visited: Object.fromEntries(visited), hidden: [...hiddenPois], settings: JSON.parse(store.get(SETTINGS_KEY) || "{}") });
+async function api(path, opts = {}) {
+  const r = await fetch(API_BASE + path, { ...opts, headers: { "Content-Type": "application/json", ...(session ? { Authorization: "Bearer " + session } : {}) } });
+  if (r.status === 401 && session && path !== "/api/login") signedOut(); // session expired or account deleted elsewhere
+  return r;
+}
+async function pushDoc() {
+  if (!session) return;
+  const updated = Number(store.get("local_updated")) || Date.now();
+  const r = await api("/api/data", { method: "PUT", body: JSON.stringify({ doc: localDoc(), updated }) }).catch(() => null);
+  if (r && r.ok) store.set("synced_at", String(updated));
+  paintAcct();
+}
+function applyDoc(doc, merge) {
+  applyingDoc = true;
+  try {
+    if (!merge) { favs.clear(); visited.clear(); hiddenPois.clear(); }
+    for (const [k, v] of Object.entries(doc.favs || {})) if (!favs.has(k)) favs.set(k, v);
+    for (const [k, v] of Object.entries(doc.visited || {})) { const cur = visited.get(k); if (!cur || (v.at && v.at < cur.at)) visited.set(k, v); } // keep the first visit date
+    (doc.hidden || []).forEach((id) => hiddenPois.add(id));
+    saveFavs(); saveVisited(); saveHiddenPois();
+    if (!merge && doc.settings && Object.keys(doc.settings).length) { store.set(SETTINGS_KEY, JSON.stringify(doc.settings)); restoreSettings(); }
+  } finally { applyingDoc = false; }
+  if (map) { render(); markFavs(); }
+}
+async function syncAccount(firstLogin) {
+  const r = await api("/api/data").catch(() => null);
+  if (!r || !r.ok) { paintAcct(); return; }
+  const { doc, updated } = await r.json();
+  const localUpdated = Number(store.get("local_updated")) || 0;
+  if (firstLogin) { if (doc) applyDoc(doc, true); store.set("local_updated", String(Date.now())); await pushDoc(); }
+  else if (doc && updated > localUpdated) { applyDoc(doc, false); store.set("local_updated", String(updated)); store.set("synced_at", String(updated)); }
+  else if (localUpdated > updated) await pushDoc();
+  paintAcct();
+}
+function onGoogleCredential(resp) {
+  api("/api/login", { method: "POST", body: JSON.stringify({ credential: resp.credential }) })
+    .then(async (r) => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast("Sign-in failed: " + (j.error || "HTTP " + r.status)); return; }
+      session = j.session; acctName = j.name || "";
+      store.set("session", session); store.set("acct_name", acctName);
+      toast("Signed in" + (acctName ? " as " + acctName : ""));
+      syncAccount(true);
+    })
+    .catch((e) => toast("Sign-in failed: " + e.message));
+}
+function signedOut() { session = ""; store.set("session", ""); store.set("acct_name", ""); paintAcct(); }
+let gsiState = "";
+function loadGsi() {
+  if (gsiState) return;
+  gsiState = "loading";
+  const sc = document.createElement("script");
+  sc.src = "https://accounts.google.com/gsi/client"; sc.async = true;
+  sc.onload = () => { google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleCredential, use_fedcm_for_prompt: true }); gsiState = "ready"; paintAcct(); };
+  sc.onerror = () => { gsiState = ""; const b = $("acct"); if (b) b.append(el("div", "Google sign-in could not load. Check the connection and reopen Settings.", "meta")); };
+  document.head.append(sc);
+}
+function paintAcct() {
+  const box = $("acct");
+  if (!box) return;
+  box.replaceChildren();
+  if (!session) {
+    box.append(el("div", "Sign in to keep favourites, visited and hidden places and your settings on all your devices. Only an anonymous account number is stored, no email.", "meta"));
+    const btn = el("div");
+    box.append(btn);
+    if (gsiState === "ready") google.accounts.id.renderButton(btn, { theme: "outline", size: "medium", text: "signin_with" });
+    else loadGsi();
+    return;
+  }
+  const synced = Number(store.get("synced_at")) || 0;
+  box.append(el("div", "Signed in" + (acctName ? " as " + acctName : "") + (synced ? " · synced " + new Date(synced).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : ""), "meta"));
+  const row = el("div", null, "row");
+  const out = el("button", "Sign out");
+  out.onclick = async () => { await api("/api/logout", { method: "POST" }).catch(() => {}); signedOut(); };
+  const del = el("button", "Delete my account and data");
+  let armed = false; // two taps instead of a confirm dialog
+  del.onclick = async () => {
+    if (!armed) { armed = true; del.textContent = "Tap again to delete everything"; setTimeout(() => { armed = false; del.textContent = "Delete my account and data"; }, 5000); return; }
+    const r = await api("/api/account", { method: "DELETE" }).catch(() => null);
+    if (r && r.ok) { signedOut(); toast("Account and its saved data deleted. This device keeps its own copy."); }
+    else toast("Could not delete the account. Try again.");
+  };
+  row.append(out, del);
+  box.append(row);
+}
+paintAcct();
+if (session) syncAccount(false);
 init();
 // Installable app: the service worker needs https (or localhost).
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});

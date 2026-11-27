@@ -1,7 +1,9 @@
-// Cloudflare Worker: serves the app's files and one small API, /api/weather, which asks MET Norway's Locationforecast
+// Cloudflare Worker: serves the app's files, the account API (account.js) and /api/weather, which asks MET Norway's Locationforecast
 // on the app's behalf. MET's terms ask for an identifying User-Agent with a contact and for results to be reused
 // (at least 3 hours outside the Nordics), so responses are kept in memory here and marked cacheable for the browser.
 // Note: caches.default does nothing on *.workers.dev addresses, so the in-memory cache is what helps until a custom domain.
+
+import { handleAccount } from "./account.js";
 
 const UA = "vanlife-map/1.0 github.com/annajagiello/vanlife-map";
 const KEEP_MS = 3 * 60 * 60 * 1000;
@@ -11,6 +13,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === "/api/weather") return weather(url, ctx);
+    if (["/api/login", "/api/data", "/api/logout", "/api/account"].includes(url.pathname)) return handleAccount(request, env, url.pathname);
     return env.ASSETS.fetch(request);
   },
 };
