@@ -218,6 +218,12 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+const SETTINGS_KEY = "settings_v1", SETTING_BOXES = ["showVan", "showCamping", "showToilets", "showLaundry", "showMalls", "showSupermarkets", "heatOn"];
+function saveSettings() {
+  const st = { mode: heatMode, panelHidden: document.body.classList.contains("nopanel") };
+  SETTING_BOXES.forEach((id) => (st[id] = $(id).checked));
+  store.set(SETTINGS_KEY, JSON.stringify(st));
+}
 const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
@@ -1137,6 +1143,7 @@ const setMode = (m) => {
   heatMode = m;
   document.querySelectorAll("#hl button, #mapMode button").forEach((x) => x.classList.toggle("on", x.dataset.m === m));
   scheduleHeat(0);
+  saveSettings();
 };
 $("hl").onclick = (e) => { const b = e.target.closest("button"); if (b) setMode(b.dataset.m); };
 
@@ -1151,7 +1158,7 @@ $("fsBtn").onclick = () => {
   else wrap.classList.toggle("fs");
 };
 // Phone: swipe the control bar down to hide it (the map gets the whole screen); swipe up on the small handle at the bottom, or tap it, to bring it back.
-const setPanel = (hide) => { document.body.classList.toggle("nopanel", hide); setSheet(false); };
+const setPanel = (hide) => { document.body.classList.toggle("nopanel", hide); setSheet(false); saveSettings(); };
 function onVerticalSwipe(node, ignore, cb) {
   let x0 = null, y0 = null;
   const fire = (t) => { // as soon as the finger has moved 40 px, mostly vertically (touchend can be cancelled by the browser's own scrolling)
@@ -1450,6 +1457,18 @@ async function showDetail(s) {
 
 document.querySelectorAll("#wxopts button").forEach((b) => (b.disabled = true)); // until Heat map is ticked
 paintOsmStats();
+// Settings survive closing the app: the spot types, heat map and what it shows, and whether the control bar is hidden.
+// The weather day is not kept: the app opens on today.
+function restoreSettings() {
+  let st;
+  try { st = JSON.parse(store.get(SETTINGS_KEY) || "{}"); } catch { st = {}; }
+  SETTING_BOXES.forEach((id) => { if (typeof st[id] === "boolean") $(id).checked = st[id]; });
+  if (["max", "min", "rain"].includes(st.mode)) { heatMode = st.mode; document.querySelectorAll("#hl button, #mapMode button").forEach((x) => x.classList.toggle("on", x.dataset.m === st.mode)); }
+  if ($("heatOn").checked) $("heatOn").onchange(); // shows the day / mode options; the map draws the heat map once it is ready
+  if (st.panelHidden) document.body.classList.add("nopanel");
+}
+restoreSettings();
+SETTING_BOXES.forEach((id) => $(id).addEventListener("change", saveSettings));
 init();
 // Installable app: the service worker needs https (or localhost).
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
