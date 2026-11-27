@@ -769,6 +769,53 @@ function showWxPaused() {
   lg.hidden = false;
 }
 
+// Weather comes from MET Norway (Locationforecast) through the app's own /api/weather (worker.js), which identifies the
+// app to MET and reuses results. MET gives hourly, later 6-hourly forecasts; the daily high / low, rain (mm) and one symbol
+// per day are worked out here, for the phone's local days. Elevations still come from Open-Meteo (below).
+const WEATHER_API = location.hostname === "localhost" ? "https://vanlife-map.annajagiello.workers.dev/api/weather" : "/api/weather";
+const MET_RANK = [[/thunder/, 9], [/snow/, 8], [/sleet/, 7], [/showers/, 5], [/rain/, 6], [/fog/, 4], [/^cloudy/, 3], [/partlycloudy/, 2], [/fair/, 1], [/clearsky/, 0]];
+const metRank = (sym) => (MET_RANK.find(([re]) => re.test(sym)) || [0, 0])[1];
+function metToWmo(sym) { // MET symbol -> the weather code the rest of the app uses for icons and words (wmo())
+  const x = sym.replace(/_(day|night|polartwilight)$/, ""), heavy = x.startsWith("heavy"), light = x.startsWith("light");
+  if (x.includes("thunder")) return 95;
+  if (x.includes("snowshowers")) return heavy ? 86 : 85;
+  if (x.includes("snow")) return heavy ? 75 : light ? 71 : 73;
+  if (x.includes("sleet")) return 66;
+  if (x.includes("rainshowers")) return heavy ? 82 : light ? 80 : 81;
+  if (x.includes("rain")) return heavy ? 65 : light ? 61 : 63;
+  return { fog: 45, cloudy: 3, partlycloudy: 2, fair: 1, clearsky: 0 }[x] ?? 3;
+}
+const localDay = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+async function metDaily(lat, lng, alt) {
+  const r = await fetch(WEATHER_API + "?lat=" + lat + "&lon=" + lng + (alt != null && alt !== "" ? "&alt=" + alt : ""));
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const { series } = await r.json();
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return localDay(d); });
+  const acc = Object.fromEntries(days.map((k) => [k, { temps: [], rain: 0, best: null, any: null }]));
+  for (const [t, temp, sym1, p1, sym6, p6] of series) {
+    const when = new Date(t), a = acc[localDay(when)];
+    if (!a) continue;
+    a.temps.push(temp);
+    a.rain += p1 ?? p6 ?? 0; // hourly part: 1-hour amounts; later part: 6-hour amounts, so nothing is counted twice
+    const h = when.getHours(), sym = sym6 || sym1;
+    if (sym && (!a.any || metRank(sym) > metRank(a.any))) a.any = sym;
+    if (sym6 && h >= 5 && h <= 13 && (!a.best || metRank(sym6) > metRank(a.best))) a.best = sym6; // the daytime 6-hour outlook decides the day's symbol
+  }
+  const out = { time: days, code: [], max: [], min: [], rain: [] };
+  for (const k of days) {
+    const a = acc[k], sym = a.best || a.any;
+    out.code.push(sym ? metToWmo(sym) : null);
+    out.max.push(a.temps.length ? Math.max(...a.temps) : null);
+    out.min.push(a.temps.length ? Math.min(...a.temps) : null);
+    out.rain.push(a.temps.length ? Math.round(a.rain * 10) / 10 : null);
+  }
+  return out;
+}
+async function runPool(tasks, n) { // at most n requests at a time (MET allows 20 a second for the whole app)
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, tasks.length) }, async () => { while (i < tasks.length) await tasks[i++](); }));
+}
+
 async function loadElevations(points) {
   const need = [...new Map(points.filter((p) => !ELEV.has(ek(p))).map((p) => [ek(p), p])).values()];
   if (!need.length || Date.now() - elevFailedAt < 30000) return;
@@ -789,24 +836,10 @@ async function loadWeather(points) {
   const need = [...new Set(points.map((p) => wxKey(p.lat, p.lng, elevOf(p))))].filter((k) => !WX.has(k));
   if (!need.length || Date.now() - wxFailedAt < 30000) { updateWx(); return; }
   try {
-    // Requests carry an elevation list only when every location in them has one.
-    const groups = [need.filter((k) => k.split(",").length === 3), need.filter((k) => k.split(",").length === 2)];
-    for (const group of groups) {
-      for (let i = 0; i < group.length; i += 40) {
-        const chunk = group.slice(i, i + 40);
-        const parts = chunk.map((k) => k.split(","));
-        const url = "https://api.open-meteo.com/v1/forecast?latitude=" + parts.map((x) => x[0]).join(",") + "&longitude=" + parts.map((x) => x[1]).join(",") +
-          (parts[0].length === 3 ? "&elevation=" + parts.map((x) => x[2]).join(",") : "") +
-          "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=7";
-        const r = await omFetch(url, chunk.length);
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const j = await r.json();
-        (Array.isArray(j) ? j : [j]).forEach((x, n) => WX.set(chunk[n], { time: x.daily.time, code: x.daily.weather_code, max: x.daily.temperature_2m_max, min: x.daily.temperature_2m_min, rain: x.daily.precipitation_probability_max }));
-      }
-    }
+    await runPool(need.map((k) => async () => { const [la, ln, el] = k.split(","); WX.set(k, await metDaily(+la, +ln, el)); }), 6);
   } catch (e) {
     wxFailedAt = Date.now(); console.warn("Weather unavailable:", e.message);
-    setTimeout(() => loadWeather(points), 31000); // Open-Meteo answers 503 now and then: retry once after the cool-down
+    setTimeout(() => loadWeather(points), 31000); // retry once after the cool-down
   }
   saveCaches();
   updateWx();
@@ -823,7 +856,7 @@ function updateWx() {
     const sp = spots.find((x) => x.id === e.dataset.sid);
     const w = sp && spotWx(sp);
     e.textContent = w ? (isHigh(sp) ? "⛰ " : "") + wxText(w, wDay) : "";
-    if (w) e.title = wmo(w.code[wDay]).text + ", high / low, rain chance " + w.rain[wDay] + "%" + (isHigh(sp) ? ", mountain spot" : "");
+    if (w) e.title = wmo(w.code[wDay]).text + ", high / low, rain " + w.rain[wDay] + " mm" + (isHigh(sp) ? ", mountain spot" : "");
   });
   markers.forEach((m, id) => { const sp = spots.find((x) => x.id === id); m.content.classList.toggle("high", !!sp && isHigh(sp)); });
   if (curSpot && !$("detail").hidden) fillWxBox(curSpot);
@@ -837,7 +870,8 @@ const HEAT_STEPS = [0.1, 0.2, 0.5, 1, 2, 5];
 
 // Cache across reloads, so reopening the page doesn't spend the hourly request budget again: elevations never expire,
 // forecasts and heat-map grids are kept for 3 hours.
-const CACHE_KEY = "om_cache_v1", CACHE_TTL = 3 * 3600 * 1000, stamps = new Map(); // "w|key" / "h|key" -> time stored
+try { localStorage.removeItem("om_cache_v1"); } catch { /* storage blocked */ }
+const CACHE_KEY = "wx_cache_v2", CACHE_TTL = 3 * 3600 * 1000, stamps = new Map(); // "w|key" / "h|key" -> time stored
 (function loadCaches() {
   try {
     const c = JSON.parse(store.get(CACHE_KEY) || "{}"), now = Date.now();
@@ -892,18 +926,12 @@ async function updateHeat() {
   if (missing.length && Date.now() - heatFailedAt < 30000) return;
   if (missing.length) { const lg = $("legend"); lg.replaceChildren(el("div", "Loading heat map…")); lg.hidden = false; }
   try {
-    for (let n = 0; n < missing.length; n += 50) {
-      const chunk = missing.slice(n, n + 50), pts = chunk.map(([i, j]) => pt(i, j));
-      const r = await omFetch("https://api.open-meteo.com/v1/forecast?latitude=" + pts.map((q) => q[0]).join(",") + "&longitude=" + pts.map((q) => q[1]).join(",") + "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=7", pts.length);
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const j = await r.json();
-      (Array.isArray(j) ? j : [j]).forEach((x, k) => HEAT.set(key(...chunk[k]), { max: x.daily.temperature_2m_max, min: x.daily.temperature_2m_min, rain: x.daily.precipitation_sum, prob: x.daily.precipitation_probability_max }));
-    }
+    await runPool(missing.map(([i, j]) => async () => { const [la, ln] = pt(i, j); const d = await metDaily(la, ln); HEAT.set(key(i, j), { max: d.max, min: d.min, rain: d.rain }); }), 6);
   } catch (e) { heatFailedAt = Date.now(); console.warn("Heat map unavailable:", e.message); showWxPaused(); scheduleHeat(31000); return; }
   saveCaches();
   if (seq !== heatSeq) return; // the view changed while loading
   const grid = (m) => Array.from({ length: rows }, (_, i) => Array.from({ length: cols }, (_, j) => HEAT.get(key(i, j))[m][wDay]));
-  heatGrid = { step, lat0, lng0, rows, cols, max: grid("max"), min: grid("min"), rain: grid("rain"), prob: grid("prob") };
+  heatGrid = { step, lat0, lng0, rows, cols, max: grid("max"), min: grid("min"), rain: grid("rain") };
   try { drawHeat(); } catch (e) { console.error("Heat map drawing failed:", e); const lg = $("legend"); lg.replaceChildren(el("div", "Heat map error: " + e.message)); lg.hidden = false; }
   thinWx();
 }
@@ -972,7 +1000,7 @@ function placeHeatLabels() {
   }
   for (const c of kept) {
     const text = rain
-      ? (c.v < 10 ? c.v.toFixed(1) : Math.round(c.v)) + " mm · " + Math.round(heatSample(g, "prob", c.lat, c.lng)) + "%"
+      ? (c.v < 10 ? c.v.toFixed(1) : Math.round(c.v)) + " mm"
       : Math.round(heatSample(g, "max", c.lat, c.lng)) + "° / " + Math.round(heatSample(g, "min", c.lat, c.lng)) + "°";
     heatLabels.push(new AdvancedMarkerElement({ map, position: { lat: c.lat, lng: c.lng }, content: el("div", text, "cell"), zIndex: -1 }));
   }
@@ -1025,7 +1053,7 @@ function drawHeat() {
     const ticks = el("div", null, "ticks");
     RAIN_VALS.forEach((v, k) => { if (k < RAIN_VALS.length - 1) { const tk = el("span", v + (k === RAIN_VALS.length - 2 ? " mm" : "")); tk.style.left = (k / (RAIN_VALS.length - 1) * 100) + "%"; ticks.append(tk); } });
     const col = el("div", null, "col");
-    col.append(el("div", "Rain per day · " + wxDayLabel(wDay)), bar, ticks);
+    col.append(el("div", "Rain per day · " + wxDayLabel(wDay)), bar, ticks, el("div", "Weather: MET Norway, CC BY 4.0", "meta"));
     lg.replaceChildren(col);
     lg.hidden = false;
     return;
@@ -1035,7 +1063,7 @@ function drawHeat() {
   const ticks = el("div", null, "ticks");
   [[0, mid - span / 2], [50, mid], [100, mid + span / 2]].forEach(([left, val]) => { const tk = el("span", Math.round(val) + "°"); tk.style.left = left + "%"; ticks.append(tk); });
   const col = el("div", null, "col");
-  col.append(el("div", (heatMode === "min" ? "Daily low · " : "Daily high · ") + wxDayLabel(wDay)), bar, ticks);
+  col.append(el("div", (heatMode === "min" ? "Daily low · " : "Daily high · ") + wxDayLabel(wDay)), bar, ticks, el("div", "Weather: MET Norway, CC BY 4.0", "meta"));
   lg.replaceChildren(col);
   lg.hidden = false;
 }
@@ -1083,7 +1111,7 @@ function fillWxBox(s) {
   if (!w) { box.append(el("div", "Weather unavailable.", "meta")); return; }
   const m = wmo(w.code[wDay]);
   box.append(el("div", m.icon + " " + m.text + " · " + Math.round(w.max[wDay]) + "° / " + Math.round(w.min[wDay]) + "°", "now"));
-  box.append(el("div", wxDayLabel(wDay, true) + " · high / low · rain chance " + w.rain[wDay] + "%" + (isHigh(s) ? " · ⛰ mountain spot" : ""), "meta"));
+  box.append(el("div", wxDayLabel(wDay, true) + " · high / low · rain " + w.rain[wDay] + " mm" + (isHigh(s) ? " · ⛰ mountain spot" : ""), "meta"));
   const strip = el("div", null); strip.id = "wxstrip";
   for (let i = 0; i < w.code.length; i++) {
     const b = el("button", null); b.dataset.i = i; b.className = i === wDay ? "on" : "";
@@ -1092,6 +1120,9 @@ function fillWxBox(s) {
     strip.append(b);
   }
   box.append(strip);
+  const credit = el("div", null, "meta"); // MET's licence asks for credit and a note that the daily figures are derived
+  credit.innerHTML = 'Weather: <a href="https://www.met.no/en" target="_blank" rel="noopener">MET Norway</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>), daily figures calculated by this app · elevation: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>';
+  box.append(credit);
 }
 
 $("heatOn").onchange = () => {
