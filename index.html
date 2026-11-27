@@ -1654,9 +1654,9 @@ function paintOnboarding() {
   [1, 2, 3].forEach((i) => dots.append(el("span", null, i === onboardStep ? "on" : "")));
   if (onboardStep === 1) {
     const img = document.createElement("img"); img.src = "icon.svg"; img.alt = "";
-    const go = el("button", "Get started", "primary");
+    const go = el("button", "Show me what's nearby", "primary");
     go.onclick = () => { onboardStep = session ? 3 : 2; paintOnboarding(); };
-    card.append(img, el("h2", "Vanlife Map"), el("p", "Find van parking spots, toilets, supermarkets and laundries, then plan your next move according to the weather map."), go);
+    card.append(img, el("h2", "Errands on the road, sorted."), el("p", "Parking, toilets, supermarkets and laundromats, with reviews, opening hours and the weather ahead."), go);
   } else if (onboardStep === 2) {
     const btn = el("div");
     const skip = el("button", "Continue without account", "skip");
@@ -1669,7 +1669,7 @@ function paintOnboarding() {
     allow.onclick = () => { finishOnboarding(); locate(); watchVisits(); };
     const later = el("button", "Not now", "skip");
     later.onclick = () => { finishOnboarding(); setStatus("Use the 📍 button or the search box to find spots."); };
-    card.append(el("h2", "Spots near you"), el("p", "Allow location to see spots around you and to mark the places you stay at as visited. It is used only while the app is open."), allow, later);
+    card.append(el("h2", "Spots near you"), el("p", "Allow location to see what's around you and mark places as visited when you get there."), allow, later);
   }
   card.append(dots);
   box.replaceChildren(card);
