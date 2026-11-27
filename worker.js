@@ -13,6 +13,9 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === "/api/weather") return weather(url, ctx);
+    // The app's built-in Google Maps key comes from the MAPS_KEY secret in Cloudflare, so it is not in the public repo.
+    // It is still visible to anyone using the app (maps keys always are); its website restriction and quotas protect it.
+    if (url.pathname === "/api/config") return reply({ mapsKey: env.MAPS_KEY || "" }, 200, { "Cache-Control": "no-store" });
     if (["/api/login", "/api/data", "/api/logout", "/api/account"].includes(url.pathname)) return handleAccount(request, env, url.pathname);
     return env.ASSETS.fetch(request);
   },

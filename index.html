@@ -98,6 +98,17 @@
   #detail .visbtn.on { color: #fff; background: #2f9e44; border-color: #2f9e44; }
   .pin .vis { display: none; position: absolute; bottom: -9px; left: -11px; width: 18px; height: 18px; border-radius: 50%; background: #2f9e44; color: #fff; border: 1px solid #111; font-size: 11px; font-weight: 800; line-height: 16px; text-align: center; pointer-events: none; }
   .pin.is-visited .vis { display: block; }
+  #onboard { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 24px; background: var(--bg); color: var(--text); }
+  #onboard[hidden] { display: none; }
+  #onboard .card { width: min(380px, 100%); display: grid; gap: 14px; justify-items: center; text-align: center; }
+  #onboard img { width: 88px; height: 88px; border-radius: 20px; }
+  #onboard h2 { margin: 0; font-size: 22px; }
+  #onboard p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+  #onboard .primary { padding: 10px 22px; font-size: 15px; }
+  #onboard .skip { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 6px; }
+  #onboard .dots { display: flex; gap: 6px; }
+  #onboard .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+  #onboard .dots span.on { background: var(--accent); }
   #toast { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 200; display: flex; gap: 10px; align-items: center; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: 10px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(0,0,0,.45); font-size: 13px; }
   #toast[hidden] { display: none; }
   #detail .favbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
@@ -204,6 +215,7 @@
       </div>
       <div class="sect">Account</div>
       <div id="acct" style="display:grid; gap:6px; margin-top:4px"></div>
+      <div id="keyChoice" style="display:grid; gap:4px; margin-top:8px; justify-items: start"></div>
       <div class="row p4n-row" style="margin-top:10px">
         <label>Park4night file <input type="file" id="p4nFile" accept=".json,application/json"></label>
       </div>
@@ -215,6 +227,7 @@
   <ul id="list"></ul>
 </aside>
 <div id="toast" hidden></div>
+<div id="onboard" hidden></div>
 <div id="panelHandle" aria-label="Show controls: swipe up or tap"></div>
 <div id="mapwrap"><div id="map"></div><button id="fsBtn" aria-label="Full screen" title="Full screen">⛶</button><div id="wxbar" hidden><div id="mapDays"></div><div id="mapMode"></div></div><div id="legend" hidden></div><div id="detail" hidden></div></div>
 
@@ -347,7 +360,9 @@ function loadMaps(key) {
 }
 
 async function init() {
-  const key = store.get("gmaps_key");
+  // A key saved on this device (your own) wins; otherwise the app's built-in key from the server.
+  let key = store.get("gmaps_key");
+  if (!key) key = await fetch(API_BASE + "/api/config").then((r) => (r.ok ? r.json() : {})).then((j) => j.mapsKey || "").catch(() => "");
   if (!key) { $("keybox").hidden = false; return; }
   $("keybox").hidden = true;
   try {
@@ -373,8 +388,8 @@ async function init() {
     map.addListener("idle", () => store.set("last_view", JSON.stringify({ center: map.getCenter().toJSON(), zoom: map.getZoom() })));
     $("tools").hidden = false;
     setStatus("Pan or zoom to an area, then press Search.");
-    locate();
-    watchVisits();
+    if (store.get("onboarded") || session) { locate(); watchVisits(); }
+    else showOnboarding(); // first launch: welcome, sign in, then ask for location
   } catch (e) {
     setStatus(e.message + ". Check the key, then reload.");
     $("keybox").hidden = false;
@@ -385,7 +400,7 @@ $("saveKey").onclick = () => {
   const v = $("key").value.trim();
   if (!v) return;
   store.set("gmaps_key", v);
-  init();
+  if (map) location.reload(); else init(); // switching keys on a running map needs a fresh start
 };
 
 // Toilets work like the other kinds: searched only while ticked. Ticking searches the view; unticking removes the pins.
@@ -1529,6 +1544,7 @@ function onGoogleCredential(resp) {
       session = j.session; acctName = j.name || "";
       store.set("session", session); store.set("acct_name", acctName);
       toast("Signed in" + (acctName ? " as " + acctName : ""));
+      if (onboardStep === 2) { onboardStep = 3; paintOnboarding(); }
       syncAccount(true);
     })
     .catch((e) => toast("Sign-in failed: " + e.message));
@@ -1540,7 +1556,7 @@ function loadGsi() {
   gsiState = "loading";
   const sc = document.createElement("script");
   sc.src = "https://accounts.google.com/gsi/client"; sc.async = true;
-  sc.onload = () => { google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleCredential, use_fedcm_for_prompt: true }); gsiState = "ready"; paintAcct(); };
+  sc.onload = () => { google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleCredential, use_fedcm_for_prompt: true }); gsiState = "ready"; paintAcct(); if (onboardStep === 2) paintOnboarding(); };
   sc.onerror = () => { gsiState = ""; const b = $("acct"); if (b) b.append(el("div", "Google sign-in could not load. Check the connection and reopen Settings.", "meta")); };
   document.head.append(sc);
 }
@@ -1572,7 +1588,55 @@ function paintAcct() {
   row.append(out, del);
   box.append(row);
 }
+// First launch: three short steps (welcome, sign in, location), shown once per device.
+let onboardStep = 0;
+function showOnboarding() { onboardStep = 1; paintOnboarding(); }
+function finishOnboarding() { store.set("onboarded", "1"); onboardStep = 0; $("onboard").hidden = true; }
+function paintOnboarding() {
+  const box = $("onboard");
+  if (!onboardStep) { box.hidden = true; return; }
+  const card = el("div", null, "card");
+  const dots = el("div", null, "dots");
+  [1, 2, 3].forEach((i) => dots.append(el("span", null, i === onboardStep ? "on" : "")));
+  if (onboardStep === 1) {
+    const img = document.createElement("img"); img.src = "icon.svg"; img.alt = "";
+    const go = el("button", "Get started", "primary");
+    go.onclick = () => { onboardStep = session ? 3 : 2; paintOnboarding(); };
+    card.append(img, el("h2", "Vanlife Map"), el("p", "Find van parking spots, toilets, supermarkets and laundries, then plan your next move according to the weather map."), go);
+  } else if (onboardStep === 2) {
+    const btn = el("div");
+    const skip = el("button", "Continue without account", "skip");
+    skip.onclick = () => { onboardStep = 3; paintOnboarding(); };
+    card.append(el("h2", "Keep your places"), el("p", "Sign in with Google to keep your favourites, visited and hidden places on all your devices. You can also do this later in Settings."), btn, skip);
+    if (gsiState === "ready") google.accounts.id.renderButton(btn, { theme: "filled_blue", size: "large", text: "signin_with", shape: "pill" });
+    else loadGsi();
+  } else {
+    const allow = el("button", "Allow location", "primary");
+    allow.onclick = () => { finishOnboarding(); locate(); watchVisits(); };
+    const later = el("button", "Not now", "skip");
+    later.onclick = () => { finishOnboarding(); setStatus("Use the 📍 button or the search box to find spots."); };
+    card.append(el("h2", "Spots near you"), el("p", "Allow location to see spots around you and to mark the places you stay at as visited. It is used only while the app is open."), allow, later);
+  }
+  card.append(dots);
+  box.replaceChildren(card);
+  box.hidden = false;
+}
+
+// Google Maps key: the app's built-in key by default; your own key (e.g. for testing) can be set in Settings.
+function paintKeyChoice() {
+  const box = $("keyChoice");
+  if (!box) return;
+  const own = !!store.get("gmaps_key");
+  const btn = el("button", own ? "Use the app's Google key" : "Use my own Google key…");
+  btn.onclick = () => {
+    if (own) { try { localStorage.removeItem("gmaps_key"); } catch { /* storage blocked */ } location.reload(); }
+    else { $("keybox").hidden = false; setSheet(false); $("key").focus(); }
+  };
+  box.replaceChildren(el("div", "Google Maps key: " + (own ? "your own (saved on this device)" : "the app's"), "meta"), btn);
+}
+
 paintAcct();
+paintKeyChoice();
 if (session) syncAccount(false);
 init();
 // Installable app: the service worker needs https (or localhost).
