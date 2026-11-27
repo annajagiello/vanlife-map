@@ -408,6 +408,7 @@ $("showToilets").onchange = () => {
   if ($("showToilets").checked) { $("search").click(); return; }
   Object.values(toiletMarkers).flat().forEach((m) => (m.map = null));
   toiletMarkers.google = []; toiletMarkers.osm = [];
+  toiletLists.google = []; toiletLists.osm = [];
   $("retryOsm").hidden = true;
   setExtra("");
   if (!$("detail").hidden && curSpot?.source === "toilet") $("detail").hidden = true;
@@ -467,6 +468,18 @@ $("gotoBtn").onclick = async () => {
   } catch (e) { setStatus("Error: " + e.message); }
 };
 
+// Areas already searched in this session (memory only, nothing stored): the map skips a new search while the view lies
+// inside one searched in the last 30 minutes with the same types ticked, and, if that search was complete (not capped),
+// also when zooming in. Google's terms allow storing only place IDs (and coordinates for 30 days), so this is not kept
+// after the app is closed.
+const COVER_MS = 30 * 60 * 1000, covered = [];
+const activeLayers = () => ["showVan", "showCamping", "showToilets", "showLaundry", "showMalls", "showSupermarkets"].filter((id) => $(id).checked);
+function coveredNow(b, z) {
+  const need = activeLayers(), ne = b.getNorthEast(), sw = b.getSouthWest();
+  return covered.some((e) => Date.now() - e.at < COVER_MS && e.b.contains(ne) && e.b.contains(sw)
+    && need.every((l) => e.layers.includes(l)) && (!e.capped || z <= e.zoom));
+}
+
 // Auto-search: after the map settles, search again when the view moved a quarter of a screen or more, or zoomed in a level or more.
 // Each search is several Places requests (billed), so it only runs from zoom AUTO_MIN_ZOOM and after a 1.2 s pause.
 const AUTO_MIN_ZOOM = 10;
@@ -482,7 +495,7 @@ function autoSearch() {
     const c = b.getCenter(), lb = lastSearch?.bounds, lc = lb?.getCenter();
     const span = lb && lb.toSpan();
     const moved = lb && (Math.abs(c.lat() - lc.lat()) > span.lat() / 4 || Math.abs(c.lng() - lc.lng()) > span.lng() / 4);
-    if (!lastSearch || moved || z >= lastSearch.zoom + 1) $("search").click();
+    if ((!lastSearch || moved || z >= lastSearch.zoom + 1) && !coveredNow(b, z)) $("search").click();
   }, 1200);
 }
 
@@ -542,6 +555,8 @@ $("search").onclick = async () => {
     spots = spots.filter((s) => s.source !== "google").concat(oldNear, google);
     render();
     checkDwell(); // new results near you may mean you have arrived somewhere
+    covered.push({ b: bounds, zoom: lastSearch.zoom, layers: activeLayers(), capped, at: Date.now() });
+    if (covered.length > 40) covered.shift();
     setStatus(google.length + " Google spots" + (hidden ? ", " + hidden + " other businesses hidden" : "") + (closed ? ", " + closed + " closed now hidden" : "") + (garages ? ", " + garages + " garages hidden" : "") + (capped ? " (very dense area: some spots may be missing, zoom in for more)" : "") + ".", true);
     if (wantToilets) loadToilets(googleToiletsP, osmToiletsP, bounds, token); // not awaited: toilets fill in as they arrive
     loadPois(bounds);
@@ -642,6 +657,7 @@ function osmFacts(t) {
   return f;
 }
 
+const mergeById = (old, add) => [...new Map([...old, ...add].map((t) => [t.id, t])).values()].slice(-600);
 const toiletLists = { google: [], osm: [] }; // last drawn, so hiding / unhiding a toilet can redraw without a new search
 function drawToilets(list, origin) {
   toiletLists[origin] = list;
@@ -688,13 +704,14 @@ async function searchTiled(base, b, depth) {
 }
 async function loadPoi(kind, bounds) {
   const cfg = POIS[kind], seq = ++poiSeq[kind];
-  poiMarkers[kind].forEach((m) => (m.map = null));
-  poiMarkers[kind] = [];
-  if (!$(cfg.box).checked || !bounds) return;
+  // Pins found earlier stay (so panning back needs no new search); unticking the type removes them all.
+  if (!$(cfg.box).checked) { poiMarkers[kind].forEach((m) => (m.map = null)); poiMarkers[kind] = []; return; }
+  if (!bounds) return;
   try {
     const places = await searchTiled({ textQuery: cfg.query, includedType: cfg.type, fields: ["id", "displayName", "location", "googleMapsURI"].concat(kind === "supermarket" ? ["primaryType", "businessStatus"] : []) }, bounds, 0);
     if (seq !== poiSeq[kind] || !$(cfg.box).checked) return; // a newer search or unticking got there first
     for (const p of places) {
+      if (poiMarkers[kind].some((m) => m.poiId === "p:" + p.id)) continue; // already on the map
       if (hiddenPois.has("p:" + p.id) || (kind === "mall" && NOT_MALL.test(p.displayName || "")) || (kind === "supermarket" && !bigSupermarket(p))) continue;
       const t = { id: "p:" + p.id, placeId: p.id, source: "poi", origin: "google", kind, name: p.displayName || KINDS[kind].label, url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng() };
       const content = pin("google", t.name, kind, t.id);
@@ -716,7 +733,7 @@ async function loadToilets(googleP, osmP, bounds, token) {
   const g = await googleP;
   if (token !== searchSeq) return;
   const googleList = (g || []).map((p) => ({ id: "t:" + p.id, source: "toilet", origin: "google", kind: "toilet", name: p.displayName || "Public toilet", url: p.googleMapsURI, lat: p.location.lat(), lng: p.location.lng() }));
-  drawToilets(googleList, "google");
+  drawToilets(mergeById(toiletLists.google, googleList), "google"); // keep toilets found earlier
   const gNote = g ? " " + googleList.length + " Google toilets" + (g.length >= 20 ? " (cap of 20; zoom in for more)" : "") : " Google toilets could not be loaded";
   lastToilets = { bounds, googleList, gNote };
   $("retryOsm").hidden = true;
@@ -740,7 +757,7 @@ function handleOsm(o, token) {
   })).filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lng));
   // Same toilet already known from Google (within 50 m): keep the Google one.
   const osmList = osmAll.filter((t) => !googleList.some((gt) => metersBetween(t, gt) <= 50));
-  drawToilets(osmList, "osm");
+  drawToilets(mergeById(toiletLists.osm, osmList), "osm");
   setExtra(gNote + " + " + osmList.length + " from OSM" + (osmAll.length > osmList.length ? " (" + (osmAll.length - osmList.length) + " duplicates skipped)" : "") + ".");
 }
 
@@ -1426,7 +1443,10 @@ async function showDetail(s) {
     const row = el("p");
     const btn = el("button", "Hide this place");
     const apply = () => { // take the pin off or put it back, without a new search where possible
-      if (s.source === "poi") { if (hiddenPois.has(s.id)) poiMarkers[s.kind].filter((m) => m.poiId === s.id).forEach((m) => (m.map = null)); else loadPoi(s.kind, map.getBounds()); }
+      if (s.source === "poi") {
+        if (hiddenPois.has(s.id)) { poiMarkers[s.kind].filter((m) => m.poiId === s.id).forEach((m) => (m.map = null)); poiMarkers[s.kind] = poiMarkers[s.kind].filter((m) => m.poiId !== s.id); }
+        else loadPoi(s.kind, map.getBounds());
+      }
       else if (s.source === "toilet") drawToilets(toiletLists[s.origin] || [], s.origin);
       else if (hiddenPois.has(s.id)) { // remove just this pin and list row: a full redraw would close this card and its Undo
         const m = markers.get(s.id); if (m) { m.map = null; markers.delete(s.id); }
