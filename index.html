@@ -469,10 +469,10 @@ $("gotoBtn").onclick = async () => {
 };
 
 // Areas already searched in this session (memory only, nothing stored): the map skips a new search while the view lies
-// inside one searched in the last 30 minutes with the same types ticked, and, if that search was complete (not capped),
+// inside one searched in the last 24 hours with the same types ticked, and, if that search was complete (not capped),
 // also when zooming in. Google's terms allow storing only place IDs (and coordinates for 30 days), so this is not kept
 // after the app is closed.
-const COVER_MS = 30 * 60 * 1000, covered = [];
+const COVER_MS = 24 * 60 * 60 * 1000, covered = [];
 const activeLayers = () => ["showVan", "showCamping", "showToilets", "showLaundry", "showMalls", "showSupermarkets"].filter((id) => $(id).checked);
 function coveredNow(b, z) {
   const need = activeLayers(), ne = b.getNorthEast(), sw = b.getSouthWest();
