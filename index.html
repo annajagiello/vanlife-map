@@ -199,7 +199,7 @@
         <label title="Show shopping malls on the map (a Places search per view)"><input type="checkbox" id="showMalls"> Malls</label>
         <label title="Show supermarkets on the map (a Places search per view)"><input type="checkbox" id="showSupermarkets"> Supermarkets</label>
         <div id="osmStats" class="meta" style="grid-column: 1 / -1"></div>
-        <label title="Opening the app within 100 m of a campsite, aire, parking or rest stop marks it as visited"><input type="checkbox" id="autoVisit" checked> Auto-mark visited</label>
+        <label title="Opening the app within 100 m of a place on the map marks the nearest one as visited"><input type="checkbox" id="autoVisit" checked> Auto-mark visited</label>
       </div>
       <div class="sect">Weather</div>
       <div class="row">
@@ -718,7 +718,7 @@ async function loadPoi(kind, bounds) {
       content.classList.add("small", "poi", "poi-" + kind);
       const m = new AdvancedMarkerElement({ map, position: { lat: t.lat, lng: t.lng }, title: t.name, content, zIndex: 1 });
       m.addListener("click", () => showDetail(t));
-      m.poiId = t.id;
+      m.poiId = t.id; m.poiData = t; // poiData: for auto-marking visited
       poiMarkers[kind].push(m);
     }
     markFavs();
@@ -1334,16 +1334,18 @@ function toggleFav(s) {
   markFavs();
   return favs.has(s.id);
 }
-// Auto-mark a campsite, aire, camper parking, parking or rest stop as visited when the app is opened (or come back to)
+// Auto-mark the nearest place on the map (any kind) as visited when the app is opened (or come back to)
 // within 100 m of one, as "I've arrived". The first 90 seconds count, so the search results around you can still arrive.
 // A web app gets no location in the background, so nothing happens while it is closed.
-const ARRIVE_R = 100, ARRIVE_WINDOW = 90 * 1000, VISIT_KINDS = ["camping", "rv", "camperpark", "parking", "reststop"];
+const ARRIVE_R = 100, ARRIVE_WINDOW = 90 * 1000;
 let lastFix = null, openedAt = Date.now();
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") openedAt = Date.now(); });
 function checkDwell() {
   if (!lastFix || !$("autoVisit").checked || Date.now() - openedAt >= ARRIVE_WINDOW) return;
   let best = null, bd = Infinity;
-  for (const s of spots) if (VISIT_KINDS.includes(s.kind)) { const d = metersBetween(s, lastFix); if (d < bd) { bd = d; best = s; } }
+  // Every kind of place on the map counts: spots, toilets, laundromats, malls and supermarkets. The nearest one is marked.
+  const places = spots.concat(toiletLists.google, toiletLists.osm, Object.values(poiMarkers).flat().map((m) => m.poiData).filter(Boolean));
+  for (const s of places) { const d = metersBetween(s, lastFix); if (d < bd) { bd = d; best = s; } }
   if (!best || bd > ARRIVE_R || visited.has(best.id)) return;
   openedAt = 0; // one mark per opening
   setVisited(best, true);
