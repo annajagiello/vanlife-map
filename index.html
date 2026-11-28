@@ -110,6 +110,9 @@
   #onboard .dots { display: flex; gap: 6px; }
   #onboard .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
   #onboard .dots span.on { background: var(--accent); }
+  #detail .amen { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 4px; }
+  #detail .amen button { padding: 3px 9px; font-size: 12px; border-radius: 14px; }
+  #detail .amen button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   #toast { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 200; display: flex; gap: 10px; align-items: center; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: 10px; background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(0,0,0,.45); font-size: 13px; }
   #toast[hidden] { display: none; }
   #detail .favbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
@@ -1154,9 +1157,16 @@ function thinWx() {
     const cur = best.get(key);
     if (!cur || rank < cur.rank || (rank === cur.rank && dist < cur.dist)) best.set(key, { it, rank, dist });
   }
-  const winners = new Set([...best.values()].map((b) => b.it));
+  // Never repeat the same reading close by: of bubbles with identical text within ~300 px, only the first (by rank) stays.
+  const kept = [];
+  for (const b of [...best.values()].sort((a, c) => a.rank - c.rank || a.dist - c.dist)) {
+    const wp = proj.fromLatLngToPoint(new google.maps.LatLng(b.it.s.lat, b.it.s.lng)), x = wp.x * scale, y = wp.y * scale;
+    if (kept.some((k) => k.it.sig === b.it.sig && Math.hypot(k.x - x, k.y - y) < 300)) continue;
+    kept.push({ it: b.it, x, y });
+  }
+  const winners = new Set(kept.map((k) => k.it));
   items.forEach((it) => it.chip.classList.toggle("skip", !winners.has(it)));
-  wxShownPx = [...winners].map((it) => { const wp = proj.fromLatLngToPoint(new google.maps.LatLng(it.s.lat, it.s.lng)); return { x: wp.x * scale, y: wp.y * scale }; });
+  wxShownPx = kept.map((k) => ({ x: k.x, y: k.y }));
   placeHeatLabels();
 }
 
@@ -1383,6 +1393,10 @@ $("autoVisit").addEventListener("change", () => store.set("auto_visit", $("autoV
 // automatically, see watchVisits().
 const visited = new Map((() => { try { return Object.entries(JSON.parse(store.get("visited") || "{}")); } catch { return []; } })());
 const saveVisited = () => { store.set("visited", JSON.stringify(Object.fromEntries(visited))); markChanged(); };
+// Your own notes on what a place has (shower, toilet, bins), keyed by place id; saved like favourites and synced to the account.
+const AMENITIES = [["shower", "🚿", "Shower"], ["toilet", "🚻", "Toilet"], ["bins", "🗑️", "Bins"]];
+const facilities = new Map((() => { try { return Object.entries(JSON.parse(store.get("facilities") || "{}")); } catch { return []; } })());
+const saveFacilities = () => { store.set("facilities", JSON.stringify(Object.fromEntries(facilities))); markChanged(); };
 function setVisited(s, on) {
   if (on) visited.set(s.id, { ...Object.fromEntries(FAV_KEYS.filter((k) => s[k] !== undefined).map((k) => [k, s[k]])), at: visited.get(s.id)?.at || Date.now() });
   else visited.delete(s.id);
@@ -1438,6 +1452,23 @@ async function showDetail(s) {
   paintVis();
   box.replaceChildren(close, star, vbtn, top, meta);
   if (visited.has(s.id)) box.append(el("div", "✓ Visited " + new Date(visited.get(s.id).at).toLocaleDateString(), "meta"));
+  { // tap to note what the place has; tap again to remove
+    const row = el("div", null, "amen");
+    row.append(el("span", "Has:", "meta"));
+    for (const [k, icon, label] of AMENITIES) {
+      const b = el("button", icon + " " + label);
+      const paint = () => { const on = !!facilities.get(s.id)?.[k]; b.classList.toggle("on", on); b.title = on ? "You noted a " + label.toLowerCase() + " here (tap to remove)" : "Tap if there is a " + label.toLowerCase() + " here"; };
+      b.onclick = () => {
+        const f = { ...(facilities.get(s.id) || {}) };
+        if (f[k]) delete f[k]; else f[k] = true;
+        if (AMENITIES.some(([x]) => f[x])) facilities.set(s.id, { ...f, at: Date.now() }); else facilities.delete(s.id);
+        saveFacilities(); paint();
+      };
+      paint();
+      row.append(b);
+    }
+    box.append(row);
+  }
   curSpot = s;
   const wbox = el("div", null); wbox.id = "wxbox";
   box.append(wbox);
@@ -1556,7 +1587,7 @@ SETTING_BOXES.forEach((id) => $(id).addEventListener("change", saveSettings));
 // Rule for two devices: whichever copy was changed last wins; the very first sign-in merges this device into the account.
 const API_BASE = location.hostname === "localhost" ? "https://vanlife-map.annajagiello.workers.dev" : "";
 const GOOGLE_CLIENT_ID = "988770051891-dr9ava1do6jdn13j4tfeodltpj46dst0.apps.googleusercontent.com";
-const localDoc = () => ({ favs: Object.fromEntries(favs), visited: Object.fromEntries(visited), hidden: [...hiddenPois], settings: JSON.parse(store.get(SETTINGS_KEY) || "{}") });
+const localDoc = () => ({ favs: Object.fromEntries(favs), visited: Object.fromEntries(visited), hidden: [...hiddenPois], facilities: Object.fromEntries(facilities), settings: JSON.parse(store.get(SETTINGS_KEY) || "{}") });
 async function api(path, opts = {}) {
   const r = await fetch(API_BASE + path, { ...opts, headers: { "Content-Type": "application/json", ...(session ? { Authorization: "Bearer " + session } : {}) } });
   if (r.status === 401 && session && path !== "/api/login") signedOut(); // session expired or account deleted elsewhere
@@ -1572,11 +1603,12 @@ async function pushDoc() {
 function applyDoc(doc, merge) {
   applyingDoc = true;
   try {
-    if (!merge) { favs.clear(); visited.clear(); hiddenPois.clear(); }
+    if (!merge) { favs.clear(); visited.clear(); hiddenPois.clear(); facilities.clear(); }
+    for (const [k, v] of Object.entries(doc.facilities || {})) facilities.set(k, { ...(facilities.get(k) || {}), ...v }); // merging keeps notes from both
     for (const [k, v] of Object.entries(doc.favs || {})) if (!favs.has(k)) favs.set(k, v);
     for (const [k, v] of Object.entries(doc.visited || {})) { const cur = visited.get(k); if (!cur || (v.at && v.at < cur.at)) visited.set(k, v); } // keep the first visit date
     (doc.hidden || []).forEach((id) => hiddenPois.add(id));
-    saveFavs(); saveVisited(); saveHiddenPois();
+    saveFavs(); saveVisited(); saveHiddenPois(); saveFacilities();
     if (!merge && doc.settings && Object.keys(doc.settings).length) { store.set(SETTINGS_KEY, JSON.stringify(doc.settings)); restoreSettings(); }
   } finally { applyingDoc = false; }
   if (map) { render(); markFavs(); }
